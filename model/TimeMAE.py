@@ -57,7 +57,7 @@ class TimeMAE(nn.Module):
         d_model = args.d_model
 
         self.momentum = args.momentum
-        self.linear_proba = True
+        self.linear_proba = "linear_proba"
         self.device = args.device
         self.data_shape = args.data_shape
         self.max_len = int(self.data_shape[0] / args.wave_length)
@@ -116,17 +116,22 @@ class TimeMAE(nn.Module):
         return [rep_mask, rep_mask_prediction], [token_prediction_prob, tokens]
 
     def forward(self, x):
-        if self.linear_proba:
+        if self.linear_proba == "linear_proba":
             with torch.no_grad():
                 x = self.input_projection(x.transpose(1, 2)).transpose(1, 2).contiguous()
                 x += self.position(x)
                 x = self.encoder(x)
                 return torch.mean(x, dim=1)
-        else:
+        elif self.linear_proba == "classification":
             x = self.input_projection(x.transpose(1, 2)).transpose(1, 2).contiguous()
             x += self.position(x)
             x = self.encoder(x)
             return self.predict_head(torch.mean(x, dim=1))
+        elif self.linear_proba == "prediction":
+            x = self.input_projection(x.transpose(1, 2)).transpose(1, 2).contiguous()
+            x += self.position(x)
+            x = self.encoder(x)
+            return x
 
     def get_tokens(self, x):
         x = self.input_projection(x.transpose(1, 2)).transpose(1, 2).contiguous()

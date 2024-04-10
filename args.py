@@ -1,7 +1,7 @@
 import argparse
 import os
 import json
-from datautils import load_UCR, load_HAR, load_mat
+from datautils import load_UCR, load_HAR, load_mat, load_ETT
 
 parser = argparse.ArgumentParser()
 # dataset and dataloader args
@@ -50,6 +50,9 @@ if args.data_path is None:
     elif args.dataset == 'mat':
         Train_data_all, Train_data, Test_data = load_mat()
         args.num_class = len(set(Train_data[1]))
+    elif args.dataset == 'ett':
+        Train_data_all, Train_data, Test_data = load_ETT()
+        args.num_class = None
 else:
     if args.dataset == 'ucr':
         path = args.data_path
@@ -63,6 +66,10 @@ else:
         path = args.data_path
         Train_data_all, Train_data, Test_data = load_mat(path)
         args.num_class = len(set(Train_data[1]))
+    elif args.dataset == 'ett':
+        path = args.data_path
+        Train_data_all, Train_data, Test_data = load_ETT(path)
+        args.num_class = None
 
 args.eval_per_steps = max(1, int(len(Train_data[0]) / args.train_batch_size))
 args.lr_decay_steps = args.eval_per_steps

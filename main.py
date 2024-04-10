@@ -29,7 +29,7 @@ def main():
     trainer = Trainer(args, model, train_loader, train_linear_loader, test_loader, verbose=True)
 
     trainer.pretrain()
-    trainer.finetune()
+    # trainer.finetune()
 
 
 if __name__ == '__main__':

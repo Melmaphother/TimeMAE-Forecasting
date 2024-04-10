@@ -129,7 +129,7 @@ class Trainer():
         print('epoch{0}, acc{1}, f1{2}'.format(0, acc, f1), file=result_file)
         result_file.close()
 
-        self.model.linear_proba = False
+        self.model.linear_proba = "classification"
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.args.lr)
         self.scheduler = LambdaLR(self.optimizer, lr_lambda=lambda step: self.lr_decay ** step, verbose=self.verbose)
         for epoch in range(self.num_epoch):

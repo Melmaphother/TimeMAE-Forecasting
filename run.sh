@@ -1,11 +1,11 @@
 #!/bin/bash
-for i in 1 2 3
+for i in 1
 do
-  save_path=exp/har//$i
+  save_path=exp/etth1//$i
   python main.py \
   --save_path $save_path \
-  --data_path data/HAR/ \
-  --dataset har \
+  --data_path data/ETTh1/ \
+  --dataset ett \
   --mask_ratio 0.6 \
   --vocab_size 192 \
   --device cuda:5 \
