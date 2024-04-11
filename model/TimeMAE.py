@@ -122,19 +122,24 @@ class TimeMAE(nn.Module):
         if self.linear_proba == "linear_proba":
             with torch.no_grad():
                 x = self.input_projection(x.transpose(1, 2)).transpose(1, 2).contiguous()
+                x = self.linear_projection(x.view(x.size(0), -1)).view(x.size(0), self.max_len, -1)
                 x += self.position(x)
                 x = self.encoder(x)
                 return torch.mean(x, dim=1)
         elif self.linear_proba == "classification":
             x = self.input_projection(x.transpose(1, 2)).transpose(1, 2).contiguous()
+            x = self.linear_projection(x.view(x.size(0), -1)).view(x.size(0), self.max_len, -1)
             x += self.position(x)
             x = self.encoder(x)
             return self.predict_head(torch.mean(x, dim=1))
-        elif self.linear_proba == "prediction":
+        elif self.linear_proba == "forecasting":  # prediction
             x = self.input_projection(x.transpose(1, 2)).transpose(1, 2).contiguous()
+            x = self.linear_projection(x.view(x.size(0), -1)).view(x.size(0), self.max_len, -1)
             x += self.position(x)
             x = self.encoder(x)
             return x
+        else:
+            raise ValueError("linear_proba should be one of ['linear_proba', 'classification', 'forecasting']")
 
     def get_tokens(self, x):
         x = self.input_projection(x.transpose(1, 2)).transpose(1, 2).contiguous()

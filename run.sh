@@ -16,6 +16,7 @@ do
   --d_model 64 \
   --num_epoch_pretrain 100 \
   --num_epoch 100 \
-  --load_pretrained_model 1
+  --load_pretrained_model 1 \
+  --lr 0.001 
 done
 

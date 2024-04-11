@@ -12,7 +12,7 @@ from dataset import Dataset
 from model.TimeMAE import TimeMAE
 from process import Trainer
 import torch.utils.data as Data
-from forecasting import forecasting
+from forecasting import TimeMAEForecasting
 
 
 def main():
@@ -52,13 +52,14 @@ def forecasting():
     print('dataset initial ends')
 
     model = TimeMAE(args)
-    state_dict = torch.load(args.save_path + 'pretrain_model.pkl', map_location=args.device)
+    state_dict = torch.load(args.save_path + '/pretrain_model copy.pkl', map_location=args.device)
     model.load_state_dict(state_dict)
     print('model initial ends')
 
     pred_lens = [24, 48, 168, 336, 720]
 
-    forecasting(args, model, train_linear_loader, val_loader, test_loader, pred_lens)
+    TimeMAEForecasting(args, model, train_linear_loader, val_loader, test_loader, pred_lens).forecasting()
 
 if __name__ == '__main__':
-    main()
+    # main()
+    forecasting()

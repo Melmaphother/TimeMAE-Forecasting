@@ -87,6 +87,7 @@ class Trainer():
                                                                                        NDCG_sum / (idx + 1)),
                   file=result_file)
             result_file.close()
+            torch.save(self.model.state_dict(), self.save_path + '/pretrain_model.pkl')
             # if (epoch + 1) % 5 == 0:
             #     self.model.eval()
             #     train_rep, train_label = get_rep_with_label(self.model, self.train_linear_loader)
