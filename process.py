@@ -87,19 +87,19 @@ class Trainer():
                                                                                        NDCG_sum / (idx + 1)),
                   file=result_file)
             result_file.close()
-            if (epoch + 1) % 5 == 0:
-                self.model.eval()
-                train_rep, train_label = get_rep_with_label(self.model, self.train_linear_loader)
-                test_rep, test_label = get_rep_with_label(self.model, self.test_loader)
-                clf = fit_lr(train_rep, train_label)
-                acc = clf.score(test_rep, test_label)
-                print(acc)
-                result_file = open(self.save_path + '/linear_result.txt', 'a+')
-                print('epoch{0}, acc{1}'.format(epoch, acc), file=result_file)
-                result_file.close()
-                if acc > eval_acc:
-                    eval_acc = acc
-                    torch.save(self.model.state_dict(), self.save_path + '/pretrain_model.pkl')
+            # if (epoch + 1) % 5 == 0:
+            #     self.model.eval()
+            #     train_rep, train_label = get_rep_with_label(self.model, self.train_linear_loader)
+            #     test_rep, test_label = get_rep_with_label(self.model, self.test_loader)
+            #     clf = fit_lr(train_rep, train_label)
+            #     acc = clf.score(test_rep, test_label)
+            #     print(acc)
+            #     result_file = open(self.save_path + '/linear_result.txt', 'a+')
+            #     print('epoch{0}, acc{1}'.format(epoch, acc), file=result_file)
+            #     result_file.close()
+            #     if acc > eval_acc:
+            #         eval_acc = acc
+            #         torch.save(self.model.state_dict(), self.save_path + '/pretrain_model.pkl')
 
     def finetune(self):
         print('finetune')

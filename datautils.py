@@ -122,16 +122,20 @@ def load_mat(Path='data/AUSLAN/'):
         np.array(TEST_DATA), np.array(TEST_LABEL)]
 
 
-def load_ETT(Path='data/ETTh1/'):
+def load_ETT(Path='data/ETT-small/ETTh1/'):
     train = torch.load(Path + 'train.pt')
     val = torch.load(Path + 'val.pt')
     test = torch.load(Path + 'test.pt')
     TRAIN_DATA = train.float()
+    TRAIN_LABEL = torch.zeros(train.size(0)).long()
     VAL_DATA = val.float()
+    VAL_LABEL = torch.zeros(val.size(0)).long()
     TEST_DATA = test.float()
+    TEST_LABEL = torch.zeros(test.size(0)).long()
 
     ALL_TRAIN_DATA = torch.cat([TRAIN_DATA, VAL_DATA])
+    ALL_TRAIN_LABEL = torch.cat([TRAIN_LABEL, VAL_LABEL])
     print('data loaded')
 
-    return [np.array(ALL_TRAIN_DATA)], [np.array(TRAIN_DATA)], [
-        np.array(TEST_DATA)]
+    return [np.array(ALL_TRAIN_DATA), np.array(ALL_TRAIN_LABEL)], [np.array(TRAIN_DATA), np.array(TRAIN_LABEL)], [
+        np.array(TEST_DATA), np.array(TEST_LABEL)]

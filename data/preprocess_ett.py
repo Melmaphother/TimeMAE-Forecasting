@@ -10,18 +10,13 @@ def window_slicing(data, slicing_size=128):
     [n_samples, n_features] -> [n_examples, slicing_size, n_features]
     """
     n_samples, n_features = data.shape
-    # 计算新的形状
-    n_examples = np.ceil(n_samples / slicing_size).astype(int)
-
-    # 计算总的元素数
-    total_size = n_examples * slicing_size
-    # 创建填充数组并填充
-    padded_array = np.zeros((total_size, n_features))
-    padded_array[:n_samples] = data
-    
-    # 重塑数组到新的形状
-    reshaped_array = padded_array.reshape(n_examples, slicing_size, n_features)
-    return reshaped_array
+    n_examples = n_samples - slicing_size + 1
+    reshaped_data = np.lib.stride_tricks.as_strided(
+        data, 
+        shape=(n_examples, slicing_size, n_features), 
+        strides=(data.strides[0], data.strides[0], data.strides[1])
+    )
+    return reshaped_data
 
 
 def preprocess_ett(file_name):
@@ -52,7 +47,7 @@ def preprocess_ett(file_name):
         os.makedirs(f'ETT-small/{file_name}')
     
     torch.save(train_data, f'ETT-small/{file_name}/train.pt')
-    torch.save(valid_data, f'ETT-small/{file_name}/valid.pt')
+    torch.save(valid_data, f'ETT-small/{file_name}/val.pt')
     torch.save(test_data, f'ETT-small/{file_name}/test.pt')
 
 if __name__ == '__main__':

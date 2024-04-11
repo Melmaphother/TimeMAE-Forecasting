@@ -52,7 +52,7 @@ if args.data_path is None:
         args.num_class = len(set(Train_data[1]))
     elif args.dataset == 'ett':
         Train_data_all, Train_data, Test_data = load_ETT()
-        args.num_class = None
+        args.num_class = 1
 else:
     if args.dataset == 'ucr':
         path = args.data_path
@@ -69,7 +69,7 @@ else:
     elif args.dataset == 'ett':
         path = args.data_path
         Train_data_all, Train_data, Test_data = load_ETT(path)
-        args.num_class = None
+        args.num_class = 1
 
 args.eval_per_steps = max(1, int(len(Train_data[0]) / args.train_batch_size))
 args.lr_decay_steps = args.eval_per_steps
