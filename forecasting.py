@@ -4,11 +4,6 @@ from tqdm import tqdm
 from torch.optim.lr_scheduler import LambdaLR
 from sklearn.linear_model import Ridge
 import time
-from args import Test_data, Train_data
-try:
-    from args import VAL_data
-except:
-    print("No validation data")
 
 def generate_pred_repr_with_label(repr, raw_data, pred_len):
     """
@@ -45,6 +40,7 @@ def generate_pred_repr_with_label(repr, raw_data, pred_len):
     )
     labels = labels[1:]  # Remove the first element
 
+    labels = labels.reshape(-1, pred_len * n_channels)
     print(f"repr_for_pred shape: {repr_for_pred.shape}, labels shape: {labels.shape}")
     return repr_for_pred, labels
 
@@ -64,24 +60,27 @@ def fit_ridge(train_X, train_y, val_X, val_y):
     ridge.fit(train_X, train_y)
     return ridge
 
-def call_loss(self, pred, target):
-        loss = np.abs(pred - target).mean() + np.sqrt(((pred - target) ** 2).mean())
-        return loss
+
+def call_loss(pred, target, mode='MSE'):
+    if mode == 'MSE':
+        loss = ((pred - target) ** 2).mean()
+    elif mode == 'MAE':
+        loss = np.abs(pred - target).mean()
+    elif mode == 'MAE+MSE':
+        loss = np.abs(pred - target).mean() + np.sqrt(((pred - target) ** 2).mean()) # 加 sqrt 为了保证度量相同
+    else:
+        raise ValueError(f"Unknown loss mode: {mode}")
+    return loss
 
 
 class TimeMAEForecasting:
-    def __init__(self, args, model, train_loader, val_loader, test_loader, pred_lens):
+    def __init__(self, args, model, raw_data, data_loader, pred_lens):
         self.args = args
         self.device = args.device
         self.model = model
-        self.train_loader = train_loader
-        self.val_loader = val_loader
-        self.test_loader = test_loader
-        self.train_raw_data, _ = Train_data
-        self.val_raw_data, _ = VAL_data
-        self.test_raw_data, _ = Test_data
+        self.train_raw_data, self.val_raw_data, self.test_raw_data = raw_data
+        self.train_loader, self.val_loader, self.test_loader = data_loader
         self.pred_lens = pred_lens
-
 
 
     def forecasting(self):
@@ -117,18 +116,20 @@ class TimeMAEForecasting:
                 test_repr = np.concatenate((test_repr, repr), axis=0)
 
         for pred_len in self.pred_lens:
-            train_repr, train_labels = generate_pred_repr_with_label(train_repr, self.train_raw_data, pred_len)
-            val_repr, val_labels = generate_pred_repr_with_label(val_repr, self.val_raw_data, pred_len)
+            train_repr_forecast, train_labels_forecast = generate_pred_repr_with_label(train_repr, self.train_raw_data, pred_len)
+            val_repr_forecast, val_labels_forecast = generate_pred_repr_with_label(val_repr, self.val_raw_data, pred_len)
             t = time.time()
-            test_repr, test_labels = generate_pred_repr_with_label(test_repr, self.test_raw_data, pred_len)
-            ridge = fit_ridge(train_repr, train_labels, val_repr, val_labels)
+            test_repr_forecast, test_labels_forecast = generate_pred_repr_with_label(test_repr, self.test_raw_data, pred_len)
+            ridge = fit_ridge(train_repr_forecast, train_labels_forecast, val_repr_forecast, val_labels_forecast)
             train_time[pred_len] = time.time() - t
 
             t = time.time()
-            test_pred = ridge.predict(test_repr)
+            test_pred = ridge.predict(test_repr_forecast)
             pred_time[pred_len] = time.time() - t
-            loss = call_loss(test_pred, test_labels)
-            print(f"Prediction length: {pred_len}, loss: {loss / len(self.test_loader)}")
+            loss = call_loss(test_pred, test_labels_forecast)
+            print(test_pred[0][0: 10])
+            print(test_labels_forecast[0][0: 10])
+            print(f"Prediction length: {pred_len}, loss: {loss}")
         
         # print time cost
         for k, v in train_time.items():

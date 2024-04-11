@@ -20,21 +20,20 @@ def window_slicing(data, slicing_size=128):
 
 def window_slicing_forecasting(data, slicing_size=128):
     n_samples, n_features = data.shape
-    # 计算填充后的总长度
-    padding = (-n_samples) % slicing_size
-    padded_array = np.pad(data, ((0, padding), (0, 0)), 'constant', constant_values=0)
-    # 更新样本数量包括填充的部分
-    n_samples_padded = n_samples + padding
-    n_examples = n_samples_padded // slicing_size
+    # 无需填充，直接计算可以完整切片的样本数量
+    n_samples_sliced = n_samples - (n_samples % slicing_size)
+    # 只取可以整除slicing_size的部分
+    sliced_data = data[:n_samples_sliced]
+    n_examples = n_samples_sliced // slicing_size
     # 计算新的strides
     new_strides = (slicing_size * data.strides[0],) + data.strides
     # 使用as_strided创建分片视图
-    sliced_array = np.lib.stride_tricks.as_strided(
-        padded_array, 
+    sliced_data = np.lib.stride_tricks.as_strided(
+        sliced_data, 
         shape=(n_examples, slicing_size, n_features), 
         strides=new_strides
     )
-    return sliced_array
+    return sliced_data
 
 
 def preprocess_ett(file_name):
@@ -82,12 +81,12 @@ def preprocess_ett(file_name):
     torch.save(valid_data, f'ETT-small/{file_name}/val.pt')
     torch.save(test_data, f'ETT-small/{file_name}/test.pt')
 
-    #torch.save(train_data_forecasting, f'ETT-small/{file_name}/train_forecasting.pt')
-    #torch.save(valid_data_forecasting, f'ETT-small/{file_name}/val_forecasting.pt')
+    torch.save(train_data_forecasting, f'ETT-small/{file_name}/train_forecasting.pt')
+    torch.save(valid_data_forecasting, f'ETT-small/{file_name}/val_forecasting.pt')
     torch.save(test_data_forecasting, f'ETT-small/{file_name}/test_forecasting.pt')
 
 if __name__ == '__main__':
     preprocess_ett('ETTh1')
-    #preprocess_ett('ETTh2')
-    #preprocess_ett('ETTm1')
-    #preprocess_ett('ETTm2')
+    preprocess_ett('ETTh2')
+    preprocess_ett('ETTm1')
+    preprocess_ett('ETTm2')

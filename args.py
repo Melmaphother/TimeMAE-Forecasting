@@ -1,7 +1,7 @@
 import argparse
 import os
 import json
-from datautils import load_UCR, load_HAR, load_mat, load_ETT
+from datautils import load_UCR, load_HAR, load_mat, load_ETT, load_ETT_forecasting
 
 parser = argparse.ArgumentParser()
 # dataset and dataloader args
@@ -69,6 +69,7 @@ else:
     elif args.dataset == 'ett':
         path = args.data_path
         Train_data_all, Train_data, VAL_data, Test_data = load_ETT(path)
+        Train_data_forecasting, VAL_data_forecasting, Test_data_forecasting = load_ETT_forecasting(path)
         args.num_class = 1
 
 args.eval_per_steps = max(1, int(len(Train_data[0]) / args.train_batch_size))

@@ -3,10 +3,15 @@ import warnings
 
 warnings.filterwarnings('ignore')
 from args import args, Test_data, Train_data_all, Train_data
-if args.dataset == 'ett':
+try:
     from args import VAL_data
-else:
-    VAL_data = None
+except:
+    print('No validation data')
+
+try:
+    from args import Train_data_forecasting, VAL_data_forecasting, Test_data_forecasting
+except:
+    print('No forecasting data')
 
 from dataset import Dataset
 from model.TimeMAE import TimeMAE
@@ -40,14 +45,12 @@ def main():
 def forecasting():
     torch.set_num_threads(12)
     torch.cuda.manual_seed(3407)
-    train_dataset = Dataset(device=args.device, mode='pretrain', data=Train_data_all, wave_len=args.wave_length)
+    train_dataset = Dataset(device=args.device, mode='train', data=Train_data_forecasting, wave_len=args.wave_length)
     train_loader = Data.DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
     args.data_shape = train_dataset.shape()
-    train_linear_dataset = Dataset(device=args.device, mode='supervise_train', data=Train_data, wave_len=args.wave_length)
-    train_linear_loader = Data.DataLoader(train_linear_dataset, batch_size=args.train_batch_size, shuffle=True)
-    val_dataset = Dataset(device=args.device, mode='val', data=VAL_data, wave_len=args.wave_length)
+    val_dataset = Dataset(device=args.device, mode='val', data=VAL_data_forecasting, wave_len=args.wave_length)
     val_loader = Data.DataLoader(val_dataset, batch_size=args.train_batch_size)
-    test_dataset = Dataset(device=args.device, mode='test', data=Test_data, wave_len=args.wave_length)
+    test_dataset = Dataset(device=args.device, mode='test', data=Test_data_forecasting, wave_len=args.wave_length)
     test_loader = Data.DataLoader(test_dataset, batch_size=args.test_batch_size)
     print('dataset initial ends')
 
@@ -58,7 +61,9 @@ def forecasting():
 
     pred_lens = [24, 48, 168, 336, 720]
 
-    TimeMAEForecasting(args, model, train_linear_loader, val_loader, test_loader, pred_lens).forecasting()
+    raw_data = (Train_data_forecasting[0], VAL_data_forecasting[0], Test_data_forecasting[0])
+    data_loader = (train_loader, val_loader, test_loader)
+    TimeMAEForecasting(args, model, raw_data, data_loader, pred_lens).forecasting()
 
 if __name__ == '__main__':
     # main()
