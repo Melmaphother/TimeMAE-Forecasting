@@ -137,5 +137,4 @@ def load_ETT(Path='data/ETT-small/ETTh1/'):
     ALL_TRAIN_LABEL = torch.cat([TRAIN_LABEL, VAL_LABEL])
     print('data loaded')
 
-    return [np.array(ALL_TRAIN_DATA), np.array(ALL_TRAIN_LABEL)], [np.array(TRAIN_DATA), np.array(TRAIN_LABEL)], [
-        np.array(TEST_DATA), np.array(TEST_LABEL)]
+    return [np.array(ALL_TRAIN_DATA), np.array(ALL_TRAIN_LABEL)], [np.array(TRAIN_DATA), np.array(TRAIN_LABEL)], [np.array(VAL_DATA), np.array(VAL_LABEL)], [np.array(TEST_DATA), np.array(TEST_LABEL)]
