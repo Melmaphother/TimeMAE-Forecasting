@@ -60,14 +60,16 @@ class TimeMAE(nn.Module):
         self.linear_proba = "linear_proba"
         self.device = args.device
         self.data_shape = args.data_shape
-        self.max_len = int(self.data_shape[0] / args.wave_length)
-        print(self.max_len)
+        self.max_len = self.data_shape[0]  # 原始数据的长度
+        self.max_len_conv = int(self.data_shape[0] / args.wave_length) # 卷积后的长度
+        print(self.max_len_conv)
         self.mask_len = int(args.mask_ratio * self.max_len)
         self.position = PositionalEmbedding(self.max_len, d_model)
 
         self.mask_token = nn.Parameter(torch.randn(d_model, ))
         self.input_projection = nn.Conv1d(args.data_shape[1], d_model, kernel_size=args.wave_length,
                                           stride=args.wave_length)
+        self.linear_projection = nn.Linear(self.max_len_conv * d_model, self.max_len * d_model) # 将卷积的结果映射到原始数据的长度
         self.encoder = Encoder(args)
         self.momentum_encoder = Encoder(args)
         self.tokenizer = Tokenizer(d_model, args.vocab_size)
@@ -93,6 +95,7 @@ class TimeMAE(nn.Module):
 
     def pretrain_forward(self, x):
         x = self.input_projection(x.transpose(1, 2)).transpose(1, 2).contiguous()
+        x = self.linear_projection(x.view(x.size(0), -1)).view(x.size(0), self.max_len, -1)
         tokens = self.tokenizer(x)
         x += self.position(x)
         rep_mask_token = self.mask_token.repeat(x.shape[0], x.shape[1], 1) + self.position(x)
