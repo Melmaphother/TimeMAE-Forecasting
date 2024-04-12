@@ -55,7 +55,7 @@ def forecasting():
     print('dataset initial ends')
 
     model = TimeMAE(args)
-    state_dict = torch.load(args.save_path + '/pretrain_model copy.pkl', map_location=args.device)
+    state_dict = torch.load(args.save_path + '/pretrain_model.pkl', map_location=args.device)
     model.load_state_dict(state_dict)
     print('model initial ends')
 

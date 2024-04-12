@@ -1,5 +1,5 @@
 #!/bin/bash
-for i in 2
+for i in 3
 do
   save_path=exp/etth1//$i
   python main.py \

@@ -55,6 +55,8 @@ def fit_ridge(train_X, train_y, val_X, val_y):
             np.abs(valid_pred - val_y).mean()
         val_results.append(loss)
     best_alpha = alphas[np.argmin(val_results)]
+    print(f"Best alpha: {best_alpha}")
+    print(f"Best loss: {val_results[np.argmin(val_results)]}")
 
     ridge = Ridge(alpha=best_alpha)
     ridge.fit(train_X, train_y)
