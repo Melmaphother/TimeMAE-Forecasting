@@ -76,13 +76,12 @@ def call_loss(pred, target, mode='MSE'):
 
 
 class TimeMAEForecasting:
-    def __init__(self, args, model, raw_data, data_loader, pred_lens):
+    def __init__(self, args, model, data_loader):
         self.args = args
         self.device = args.device
         self.model = model
-        self.train_raw_data, self.val_raw_data, self.test_raw_data = raw_data
         self.train_loader, self.val_loader, self.test_loader = data_loader
-        self.pred_lens = pred_lens
+        self.pred_len = args.pred_len
 
 
     def forecasting(self):

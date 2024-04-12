@@ -13,7 +13,7 @@ try:
 except:
     print('No forecasting data')
 
-from dataset import Dataset
+from dataset import Dataset, ETTForecastingDataset
 from model.TimeMAE import TimeMAE
 from process import Trainer
 import torch.utils.data as Data
@@ -45,25 +45,26 @@ def main():
 def forecasting():
     torch.set_num_threads(12)
     torch.cuda.manual_seed(3407)
-    train_dataset = Dataset(device=args.device, mode='train', data=Train_data_forecasting, wave_len=args.wave_length)
-    train_loader = Data.DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
-    args.data_shape = train_dataset.shape()
-    val_dataset = Dataset(device=args.device, mode='val', data=VAL_data_forecasting, wave_len=args.wave_length)
-    val_loader = Data.DataLoader(val_dataset, batch_size=args.train_batch_size)
-    test_dataset = Dataset(device=args.device, mode='test', data=Test_data_forecasting, wave_len=args.wave_length)
-    test_loader = Data.DataLoader(test_dataset, batch_size=args.test_batch_size)
-    print('dataset initial ends')
-
-    model = TimeMAE(args)
-    state_dict = torch.load(args.save_path + '/pretrain_model.pkl', map_location=args.device)
-    model.load_state_dict(state_dict)
-    print('model initial ends')
-
     pred_lens = [24, 48, 168, 336, 720]
+    for pred_len in pred_lens:
+        args.pred_len = pred_len
+        train_dataset = ETTForecastingDataset(args, 'train')
+        train_loader = Data.DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
+        val_dataset = ETTForecastingDataset(args, 'val')
+        val_loader = Data.DataLoader(val_dataset, batch_size=args.test_batch_size)
+        test_dataset = ETTForecastingDataset(args, 'test')
+        test_loader = Data.DataLoader(test_dataset, batch_size=args.test_batch_size)
 
-    raw_data = (Train_data_forecasting[0], VAL_data_forecasting[0], Test_data_forecasting[0])
-    data_loader = (train_loader, val_loader, test_loader)
-    TimeMAEForecasting(args, model, raw_data, data_loader, pred_lens).forecasting()
+        print('dataset initial ends')
+
+        model = TimeMAE(args)
+        state_dict = torch.load(args.save_path + '/pretrain_model.pkl', map_location=args.device)
+        model.load_state_dict(state_dict)
+        print('model initial ends')
+
+        data_loader = (train_loader, val_loader, test_loader)
+        TimeMAEForecasting(args, model, data_loader).forecasting()
+
 
 if __name__ == '__main__':
     # main()

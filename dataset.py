@@ -28,3 +28,54 @@ class Dataset(Data.Dataset):
 
     def shape(self):
         return self.datas[0].shape
+
+
+class ETTForecastingDataset(Data.Dataset):
+    def __init__(self, args, mode='train'):
+        self.args = args
+        self.device = args.device
+        self.pred_len = args.pred_len
+        self.mode = mode
+        self.slicing_size=128
+        self.__read_data__()
+    
+    def __read_data__(self):
+        self.raw_data = torch.load(self.args.data_path + self.mode + '_forecasting.pt')
+        self.raw_data = np.array(self.raw_data)
+
+        self.raw_data_drop_last_pred = self.raw_data[:-self.pred_len]
+        
+        n_samples, n_features = self.raw_data_drop_last_pred.shape
+        # 无需填充，直接计算可以完整切片的样本数量
+        n_samples_sliced = n_samples - (n_samples % self.slicing_size)
+        # 只取可以整除slicing_size的部分
+        self.sliced_data = self.raw_data_drop_last_pred[:n_samples_sliced]
+        n_examples = n_samples_sliced // self.slicing_size
+        # 计算新的strides
+        new_strides = (self.slicing_size * self.raw_data_drop_last_pred.strides[0],) + self.raw_data_drop_last_pred.strides
+        # 使用as_strided创建分片视图
+        self.sliced_data = np.lib.stride_tricks.as_strided(
+            self.sliced_data, 
+        shape=(n_examples, self.slicing_size, n_features), 
+        strides=new_strides
+        )
+        """
+        pred_len = 720
+        etth1        train val test
+        raw_data:    (8640, 7) (2880, 7) (2880, 7)
+        raw_data_drop_last_pred: (7920, 7) (2160, 7) (2160, 7)
+        sliced_data: (7793, 128, 7) (2033, 128, 7) (2033, 128, 7)
+        """
+    
+    def __len__(self):
+        return len(self.sliced_data)
+
+
+    def __getitem__(self, idx):
+        data = self.sliced_data[idx]
+        label_l = idx * self.slicing_size + self.slicing_size
+        label_r = idx * self.slicing_size + self.slicing_size + self.pred_len
+        label = self.raw_data[label_l: label_r]
+        data = data.to(self.device)
+        label = label.to(self.device)
+        return data, label

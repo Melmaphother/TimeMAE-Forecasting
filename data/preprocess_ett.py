@@ -58,12 +58,12 @@ def preprocess_ett(file_name):
     valid_data = window_slicing(data[valid_slice])
     test_data = window_slicing(data[test_slice])
 
-    train_data_forecasting = window_slicing_forecasting(data[train_slice])
-    valid_data_forecasting = window_slicing_forecasting(data[valid_slice])
-    test_data_forecasting = window_slicing_forecasting(data[test_slice])
-    print(data[train_slice].shape, data[valid_slice].shape, data[test_slice].shape)
-    print(train_data.shape, valid_data.shape, test_data.shape)
-    print(train_data_forecasting.shape, valid_data_forecasting.shape, test_data_forecasting.shape)
+    # train_data_forecasting = window_slicing_forecasting(data[train_slice])
+    # valid_data_forecasting = window_slicing_forecasting(data[valid_slice])
+    # test_data_forecasting = window_slicing_forecasting(data[test_slice])
+    # print(data[train_slice].shape, data[valid_slice].shape, data[test_slice].shape)
+    # print(train_data.shape, valid_data.shape, test_data.shape)
+    # print(train_data_forecasting.shape, valid_data_forecasting.shape, test_data_forecasting.shape)
     """
     etth1
     (8640, 7) (2880, 7) (2880, 7)
@@ -72,7 +72,8 @@ def preprocess_ett(file_name):
     """
 
     train_data, valid_data, test_data = torch.from_numpy(train_data), torch.from_numpy(valid_data), torch.from_numpy(test_data)
-    train_data_forecasting, valid_data_forecasting, test_data_forecasting = torch.from_numpy(train_data_forecasting), torch.from_numpy(valid_data_forecasting), torch.from_numpy(test_data_forecasting)
+    train_data_forecasting, valid_data_forecasting, test_data_forecasting = torch.from_numpy(data[train_slice]), torch.from_numpy(data[valid_slice]), torch.from_numpy(data[test_slice])
+    # train_data_forecasting, valid_data_forecasting, test_data_forecasting = torch.from_numpy(train_data_forecasting), torch.from_numpy(valid_data_forecasting), torch.from_numpy(test_data_forecasting)
 
     if not os.path.exists(f'ETT-small/{file_name}'):
         os.makedirs(f'ETT-small/{file_name}')
