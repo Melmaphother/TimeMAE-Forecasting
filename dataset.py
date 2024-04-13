@@ -46,19 +46,17 @@ class ETTForecastingDataset(Data.Dataset):
         self.raw_data_drop_last_pred = self.raw_data[:-self.pred_len]
         
         n_samples, n_features = self.raw_data_drop_last_pred.shape
-        # 无需填充，直接计算可以完整切片的样本数量
-        n_samples_sliced = n_samples - (n_samples % self.slicing_size)
-        # 只取可以整除slicing_size的部分
-        self.sliced_data = self.raw_data_drop_last_pred[:n_samples_sliced]
-        n_examples = n_samples_sliced // self.slicing_size
-        # 计算新的strides
-        new_strides = (self.slicing_size * self.raw_data_drop_last_pred.strides[0],) + self.raw_data_drop_last_pred.strides
-        # 使用as_strided创建分片视图
+        n_examples = n_samples - self.slicing_size + 1
         self.sliced_data = np.lib.stride_tricks.as_strided(
-            self.sliced_data, 
-        shape=(n_examples, self.slicing_size, n_features), 
-        strides=new_strides
+            self.raw_data_drop_last_pred, 
+            shape=(n_examples, self.slicing_size, n_features), 
+            strides=(
+                self.raw_data_drop_last_pred.strides[0], 
+                self.raw_data_drop_last_pred.strides[0], 
+                self.raw_data_drop_last_pred.strides[1]
+            )
         )
+        # print(self.sliced_data.shape)
         """
         pred_len = 720
         etth1        train val test
@@ -73,9 +71,12 @@ class ETTForecastingDataset(Data.Dataset):
 
     def __getitem__(self, idx):
         data = self.sliced_data[idx]
-        label_l = idx * self.slicing_size + self.slicing_size
-        label_r = idx * self.slicing_size + self.slicing_size + self.pred_len
+        label_l = idx + self.slicing_size
+        label_r = label_l + self.pred_len
         label = self.raw_data[label_l: label_r]
-        data = data.to(self.device)
-        label = label.to(self.device)
-        return data, label
+        data = torch.tensor(data).to(self.device)
+        pred_label = torch.tensor(label).to(self.device)
+        return data, pred_label
+
+    def shape(self):
+        return self.sliced_data[0].shape

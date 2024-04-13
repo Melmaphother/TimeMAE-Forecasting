@@ -39,7 +39,7 @@ def window_slicing_forecasting(data, slicing_size=128):
 def preprocess_ett(file_name):
     data = pd.read_csv(f'ETT-small/{file_name}.csv', index_col='date', parse_dates=True)
 
-    data = data.to_numpy()
+    data = data.to_numpy(dtype=np.float32)
     if file_name == 'ETTh1' or file_name == 'ETTh2':
         train_slice = slice(None, 12*30*24)
         valid_slice = slice(12*30*24, 16*30*24)

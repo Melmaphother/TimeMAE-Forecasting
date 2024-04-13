@@ -44,6 +44,7 @@ class Trainer():
     def pretrain(self):
         print('pretraining')
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.args.lr)
+        self.scheduler = LambdaLR(self.optimizer, lr_lambda=lambda step: self.lr_decay ** step, verbose=self.verbose)
         eval_acc = 0
         align = Align()
         reconstruct = Reconstruct()
@@ -76,6 +77,11 @@ class Trainer():
                 self.optimizer.step()
                 self.model.momentum_update()
                 loss_sum += loss.item()
+            
+            curr_lr = self.scheduler.get_last_lr()[0]
+            print('curr_lr:', curr_lr)
+            self.scheduler.step()
+            
             print('pretrain epoch{0}, loss{1}, mse{2}, ce{3}, hits{4}, ndcg{5}'.format(epoch + 1, loss_sum / (idx + 1),
                                                                                        loss_mse / (idx + 1),
                                                                                        loss_ce / (idx + 1), hits_sum,
@@ -88,6 +94,7 @@ class Trainer():
                   file=result_file)
             result_file.close()
             torch.save(self.model.state_dict(), self.save_path + '/pretrain_model.pkl')
+
             # if (epoch + 1) % 5 == 0:
             #     self.model.eval()
             #     train_rep, train_label = get_rep_with_label(self.model, self.train_linear_loader)

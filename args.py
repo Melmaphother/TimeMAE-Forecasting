@@ -39,6 +39,9 @@ parser.add_argument('--num_epoch_pretrain', type=int, default=1)
 parser.add_argument('--num_epoch', type=int, default=1)
 parser.add_argument('--load_pretrained_model', type=int, default=1)
 
+# forecasting args
+parser.add_argument('--pred_len', type=int, default=24)
+
 args = parser.parse_args()
 if args.data_path is None:
     if args.dataset == 'ucr':

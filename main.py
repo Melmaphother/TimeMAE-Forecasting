@@ -1,5 +1,6 @@
 import torch
 import warnings
+import os
 
 warnings.filterwarnings('ignore')
 from args import args, Test_data, Train_data_all, Train_data
@@ -50,22 +51,28 @@ def forecasting():
         args.pred_len = pred_len
         train_dataset = ETTForecastingDataset(args, 'train')
         train_loader = Data.DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
+        args.data_shape = train_dataset.shape()
         val_dataset = ETTForecastingDataset(args, 'val')
         val_loader = Data.DataLoader(val_dataset, batch_size=args.test_batch_size)
         test_dataset = ETTForecastingDataset(args, 'test')
         test_loader = Data.DataLoader(test_dataset, batch_size=args.test_batch_size)
 
+        print(args.data_shape)
         print('dataset initial ends')
 
         model = TimeMAE(args)
         state_dict = torch.load(args.save_path + '/pretrain_model.pkl', map_location=args.device)
         model.load_state_dict(state_dict)
+        model.init_forecasting(args, pred_len)
         print('model initial ends')
 
+        args.save_path_each_pred = args.save_path + '/' +str(pred_len) + '/'
+        if not os.path.exists(args.save_path_each_pred):
+            os.makedirs(args.save_path_each_pred)
         data_loader = (train_loader, val_loader, test_loader)
-        TimeMAEForecasting(args, model, data_loader).forecasting()
+        TimeMAEForecasting(args, model, data_loader).forecasting_finetune()
 
 
 if __name__ == '__main__':
-    # main()
+    main()
     forecasting()

@@ -1,5 +1,3 @@
 /data/*[!.py]
-exp/etth1/1
-exp/etth1/2
-exp/etth1/3/*[!.pkl]
+exp
 __pycache__

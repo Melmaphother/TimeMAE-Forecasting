@@ -61,10 +61,11 @@ class TimeMAE(nn.Module):
         self.device = args.device
         self.data_shape = args.data_shape
         self.max_len = self.data_shape[0]  # 原始数据的长度
+        self.channels = self.data_shape[1] # 原始数据的通道数
         self.max_len_conv = int(self.data_shape[0] / args.wave_length) # 卷积后的长度
         print(self.max_len_conv)
-        self.mask_len = int(args.mask_ratio * self.max_len)
-        self.position = PositionalEmbedding(self.max_len, d_model)
+        self.mask_len = int(args.mask_ratio * self.max_len_conv)
+        self.position = PositionalEmbedding(self.max_len_conv, d_model)
 
         self.mask_token = nn.Parameter(torch.randn(d_model, ))
         self.input_projection = nn.Conv1d(args.data_shape[1], d_model, kernel_size=args.wave_length,
@@ -75,7 +76,14 @@ class TimeMAE(nn.Module):
         self.tokenizer = Tokenizer(d_model, args.vocab_size)
         self.reg = Regressor(d_model, args.attn_heads, 4 * d_model, 1, args.reg_layers)
         self.predict_head = nn.Linear(d_model, args.num_class)
+        # forecasting
+        self.flatten = nn.Flatten()
+        self.dropout = nn.Dropout(args.dropout)
         self.apply(self._init_weights)
+
+    def init_forecasting(self, args, pred_len):
+        self.forecasting_head = nn.Linear(self.max_len_conv * args.d_model, pred_len * self.channels).to(self.device)
+
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
@@ -95,7 +103,7 @@ class TimeMAE(nn.Module):
 
     def pretrain_forward(self, x):
         x = self.input_projection(x.transpose(1, 2)).transpose(1, 2).contiguous()
-        x = self.linear_projection(x.view(x.size(0), -1)).view(x.size(0), self.max_len, -1)
+        # x = self.linear_projection(x.view(x.size(0), -1)).view(x.size(0), self.max_len, -1)
         tokens = self.tokenizer(x)
         x += self.position(x)
         rep_mask_token = self.mask_token.repeat(x.shape[0], x.shape[1], 1) + self.position(x)
@@ -118,25 +126,29 @@ class TimeMAE(nn.Module):
 
         return [rep_mask, rep_mask_prediction], [token_prediction_prob, tokens]
 
-    def forward(self, x):
+    def forward(self, x, pred_len=1):
         if self.linear_proba == "linear_proba":
             with torch.no_grad():
                 x = self.input_projection(x.transpose(1, 2)).transpose(1, 2).contiguous()
-                x = self.linear_projection(x.view(x.size(0), -1)).view(x.size(0), self.max_len, -1)
+                # x = self.linear_projection(x.view(x.size(0), -1)).view(x.size(0), self.max_len, -1)
                 x += self.position(x)
                 x = self.encoder(x)
                 return torch.mean(x, dim=1)
         elif self.linear_proba == "classification":
             x = self.input_projection(x.transpose(1, 2)).transpose(1, 2).contiguous()
-            x = self.linear_projection(x.view(x.size(0), -1)).view(x.size(0), self.max_len, -1)
+            # x = self.linear_projection(x.view(x.size(0), -1)).view(x.size(0), self.max_len, -1)
             x += self.position(x)
             x = self.encoder(x)
             return self.predict_head(torch.mean(x, dim=1))
         elif self.linear_proba == "forecasting":  # prediction
             x = self.input_projection(x.transpose(1, 2)).transpose(1, 2).contiguous()
-            x = self.linear_projection(x.view(x.size(0), -1)).view(x.size(0), self.max_len, -1)
+            # x = self.linear_projection(x.view(x.size(0), -1)).view(x.size(0), self.max_len, -1)
             x += self.position(x)
-            x = self.encoder(x)
+            x = self.encoder(x)  # [bs, len_conv, d_model]
+            x = self.flatten(x) # [bs, len_conv * d_model]
+            x = self.forecasting_head(x)
+            x = self.dropout(x)
+            x = x.view(-1, pred_len, self.channels) # [bs, pred_len, channels]
             return x
         else:
             raise ValueError("linear_proba should be one of ['linear_proba', 'classification', 'forecasting']")
