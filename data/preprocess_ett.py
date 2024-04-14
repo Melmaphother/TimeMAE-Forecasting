@@ -57,6 +57,11 @@ def preprocess_ett(file_name):
     train_data = window_slicing(data[train_slice])
     valid_data = window_slicing(data[valid_slice])
     test_data = window_slicing(data[test_slice])
+    
+    print(data[train_slice, 6].mean(), data[train_slice, 6].std())
+    print(data[valid_slice, 6].mean(), data[valid_slice, 6].std())
+    print(data[test_slice, 6].mean(), data[test_slice, 6].std())
+    print('\n')
 
     # train_data_forecasting = window_slicing_forecasting(data[train_slice])
     # valid_data_forecasting = window_slicing_forecasting(data[valid_slice])

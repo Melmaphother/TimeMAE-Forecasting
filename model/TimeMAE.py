@@ -76,13 +76,13 @@ class TimeMAE(nn.Module):
         self.tokenizer = Tokenizer(d_model, args.vocab_size)
         self.reg = Regressor(d_model, args.attn_heads, 4 * d_model, 1, args.reg_layers)
         self.predict_head = nn.Linear(d_model, args.num_class)
-        # forecasting
-        self.flatten = nn.Flatten()
-        self.dropout = nn.Dropout(args.dropout)
         self.apply(self._init_weights)
 
     def init_forecasting(self, args, pred_len):
+        self.flatten = nn.Flatten().to(self.device)
         self.forecasting_head = nn.Linear(self.max_len_conv * args.d_model, pred_len * self.channels).to(self.device)
+        self.norm = nn.BatchNorm1d(self.channels).to(self.device)
+        self.dropout = nn.Dropout(args.dropout).to(self.device)
 
 
     def _init_weights(self, module):
@@ -146,9 +146,11 @@ class TimeMAE(nn.Module):
             x += self.position(x)
             x = self.encoder(x)  # [bs, len_conv, d_model]
             x = self.flatten(x) # [bs, len_conv * d_model]
-            x = self.forecasting_head(x)
-            x = self.dropout(x)
+            x = self.forecasting_head(x) # [bs, pred_len * channels]
             x = x.view(-1, pred_len, self.channels) # [bs, pred_len, channels]
+            # x = x.transpose(1, 2).contiguous() # [bs, channels, pred_len]
+            # x = self.norm(x).transpose(1, 2).contiguous() # [bs, pred_len, channels]
+            x = self.dropout(x)
             return x
         else:
             raise ValueError("linear_proba should be one of ['linear_proba', 'classification', 'forecasting']")

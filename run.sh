@@ -1,10 +1,10 @@
 #!/bin/bash
 for i in 1
 do
-  save_path=exp/etth1//$i
+  save_path=exp/ettm1//$i
   python main.py \
   --save_path $save_path \
-  --data_path data/ETT-small/ETTh1/ \
+  --data_path data/ETT-small/ETTm1/ \
   --dataset ett \
   --mask_ratio 0.6 \
   --vocab_size 192 \

@@ -46,16 +46,19 @@ def main():
 def forecasting():
     torch.set_num_threads(12)
     torch.cuda.manual_seed(3407)
-    pred_lens = [24, 48, 168, 336, 720]
+    #pred_lens = [24, 48, 96, 168, 192, 336, 720]
+    pred_lens = [288, 672]
+    test_loss_all = {}
     for pred_len in pred_lens:
         args.pred_len = pred_len
+        print('pred_len:', pred_len)
         train_dataset = ETTForecastingDataset(args, 'train')
-        train_loader = Data.DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
+        train_loader = Data.DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True, drop_last=True)
         args.data_shape = train_dataset.shape()
         val_dataset = ETTForecastingDataset(args, 'val')
-        val_loader = Data.DataLoader(val_dataset, batch_size=args.test_batch_size)
+        val_loader = Data.DataLoader(val_dataset, batch_size=args.test_batch_size, drop_last=True)
         test_dataset = ETTForecastingDataset(args, 'test')
-        test_loader = Data.DataLoader(test_dataset, batch_size=args.test_batch_size)
+        test_loader = Data.DataLoader(test_dataset, batch_size=args.test_batch_size, drop_last=True)
 
         print(args.data_shape)
         print('dataset initial ends')
@@ -70,9 +73,13 @@ def forecasting():
         if not os.path.exists(args.save_path_each_pred):
             os.makedirs(args.save_path_each_pred)
         data_loader = (train_loader, val_loader, test_loader)
-        TimeMAEForecasting(args, model, data_loader).forecasting_finetune()
+        test_loss = TimeMAEForecasting(args, model, data_loader).forecasting_finetune()
+        test_loss_all[pred_len] = test_loss
+    
+    for key, value in test_loss_all.items():
+        print("pred_len:", key, "test_loss:", value)
 
 
 if __name__ == '__main__':
-    main()
+    # main()
     forecasting()

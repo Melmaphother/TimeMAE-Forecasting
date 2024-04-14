@@ -162,11 +162,9 @@ class TimeMAEForecasting:
 
         self.best_val_loss = 10000
 
-        for epoch in range(self.num_epoch // 5):
+        for epoch in range(self.num_epoch // 10):
             train_loss_epoch, train_time_cost = self._train_single_epoch()
             val_loss_epoch, val_time_cost = self._eval_single_epoch()
-            train_loss_epoch = train_loss_epoch
-            val_loss_epoch = val_loss_epoch
             curr_lr = self.scheduler.get_last_lr()[0]
             print(f"Current learning rate: {curr_lr}")
             self.scheduler.step()
@@ -186,12 +184,12 @@ class TimeMAEForecasting:
 
         
         test_loss = self._eval_model()
-        test_loss = test_loss
         self.result_file = open(self.save_path + 'test_result.txt', 'a+')
         print(f"Test loss: {test_loss}", file=self.result_file)
         self.result_file.close()
         
         self.print_process('Test loss: {0}'.format(test_loss))
+        return test_loss
 
     
     def _train_single_epoch(self):
