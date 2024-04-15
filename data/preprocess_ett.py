@@ -3,6 +3,7 @@ import pandas as pd
 import torch
 from sklearn.preprocessing import StandardScaler
 import os
+from pathlib import Path
 
 
 def window_slicing(data, slicing_size=128):
@@ -37,7 +38,8 @@ def window_slicing_forecasting(data, slicing_size=128):
 
 
 def preprocess_ett(file_name):
-    data = pd.read_csv(f'ETT-small/{file_name}.csv', index_col='date', parse_dates=True)
+    path = Path(f'ETT-small/{file_name}.csv')
+    data = pd.read_csv(path, index_col='date', parse_dates=True)
 
     data = data.to_numpy(dtype=np.float32)
     if file_name == 'ETTh1' or file_name == 'ETTh2':

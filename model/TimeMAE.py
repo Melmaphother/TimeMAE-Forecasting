@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.init import xavier_normal_, uniform_, constant_
 from .layers import TransformerBlock, PositionalEmbedding, CrossAttnTRMBlock
-
+from .RevIN import RevIN
 
 class Encoder(nn.Module):
     def __init__(self, args):
@@ -84,6 +84,8 @@ class TimeMAE(nn.Module):
         self.norm = nn.BatchNorm1d(self.channels).to(self.device)
         self.dropout = nn.Dropout(args.dropout).to(self.device)
 
+        self.revin_layer = RevIN(self.channels)
+
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
@@ -141,16 +143,19 @@ class TimeMAE(nn.Module):
             x = self.encoder(x)
             return self.predict_head(torch.mean(x, dim=1))
         elif self.linear_proba == "forecasting":  # prediction
+            x = self.revin_layer(x, 'norm')
+
             x = self.input_projection(x.transpose(1, 2)).transpose(1, 2).contiguous()
             # x = self.linear_projection(x.view(x.size(0), -1)).view(x.size(0), self.max_len, -1)
             x += self.position(x)
             x = self.encoder(x)  # [bs, len_conv, d_model]
+            
             x = self.flatten(x) # [bs, len_conv * d_model]
             x = self.forecasting_head(x) # [bs, pred_len * channels]
             x = x.view(-1, pred_len, self.channels) # [bs, pred_len, channels]
-            # x = x.transpose(1, 2).contiguous() # [bs, channels, pred_len]
-            # x = self.norm(x).transpose(1, 2).contiguous() # [bs, pred_len, channels]
             x = self.dropout(x)
+        
+            x = self.revin_layer(x, 'denorm')
             return x
         else:
             raise ValueError("linear_proba should be one of ['linear_proba', 'classification', 'forecasting']")

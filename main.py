@@ -46,8 +46,8 @@ def main():
 def forecasting():
     torch.set_num_threads(12)
     torch.cuda.manual_seed(3407)
-    #pred_lens = [24, 48, 96, 168, 192, 336, 720]
-    pred_lens = [288, 672]
+    pred_lens = [24, 48, 96, 168, 192, 288, 336, 672, 720]
+    #pred_lens = [288, 672]
     test_loss_all = {}
     for pred_len in pred_lens:
         args.pred_len = pred_len
