@@ -1,3 +1,2 @@
-/data/*[!.py]
-exp
-__pycache__
+data_provider/ETT-small/
+.idea
