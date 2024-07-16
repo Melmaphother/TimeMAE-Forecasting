@@ -21,7 +21,6 @@ class FeatureExtractor(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass of the FeatureExtractor module.
         Args:
             x: input tensor, shape (batch_size, seq_len，n_features)
         Returns:
@@ -45,7 +44,6 @@ class CodeBook(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass of the CodeBook module.
         Args:
             x: input tensor, shape (batch_size, seq_len, d_model)
         Returns:
@@ -84,7 +82,6 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass of the PositionalEncoding module.
         Args:
             x: input tensor, shape (batch_size, seq_len, d_model)
         Returns:
@@ -112,7 +109,6 @@ class ResidualConnection(nn.Module):
 
     def forward(self, x: torch.Tensor, sublayer: nn.Module) -> torch.Tensor:
         """
-        Forward pass of the ResidualConnection module.
         Args:
             x: input tensor, shape (batch_size, seq_len, d_model)
             sublayer: sublayer module
@@ -152,7 +148,6 @@ class TimeMAEEncoderLayer(nn.Module):
 
     def forward(self, x, mask=None):
         """
-        Forward pass of the TimeMAETransformerEncoderLayer module.
         Args:
             x: input tensor, shape (batch_size, seq_len, d_model)
             mask: mask tensor, shape (seq_len, seq_len)
@@ -188,7 +183,6 @@ class TimeMAEDecoupledEncoderLayer(nn.Module):
 
     def forward(self, x_visible, x_mask_token, mask=None):
         """
-        Forward pass of the TimeMAETransformerEncoderLayer module.
         Args:
             x_visible: input tensor, shape (batch_size, visible_seq_len, d_model)
             x_mask_token: input tensor, shape (batch_size, seq_len, d_model)
@@ -228,7 +222,6 @@ class TimeMAEEncoder(nn.Module):
 
     def forward(self, x: torch.Tensor, mask=None) -> torch.Tensor:
         """
-        Forward pass of the TimeMAEEncoder module.
         Args:
             x: input tensor, shape (batch_size, seq_len, d_model)
             mask: mask tensor, shape (seq_len, seq_len)
@@ -264,7 +257,6 @@ class TimeMAEDecoupledEncoder(nn.Module):
 
     def forward(self, x_visible: torch.Tensor, x_mask_token: torch.Tensor, mask=None) -> torch.Tensor:
         """
-        Forward pass of the TimeMAEDecoupledEncoder module.
         Args:
             x_visible: input tensor, shape (batch_size, visible_seq_len, d_model)
             x_mask_token: input tensor, shape (batch_size, seq_len, d_model)
@@ -288,7 +280,6 @@ class TimeMAEClassifyHead(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass of the TimeMAEClassifyHead module.
         Args:
             x: input tensor, shape (batch_size, seq_len, d_model)
         Returns:
@@ -314,7 +305,6 @@ class TimeMAEForecastHead(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass of the TimeMAEForecastHead module.
         Args:
             x: input tensor, shape (batch_size, seq_len, d_model)
         Returns:
