@@ -1,12 +1,17 @@
 import torch
 import torch.nn as nn
 from argparse import Namespace
-from layers.TimeMAE_EncDec import (
+from layers.RevIN import RevIN
+from layers.TimeMAE_backbone import (
     FeatureExtractor,
     CodeBook,
     PositionalEncoding,
     TimeMAEEncoder,
-    TimeMAEDecoupledEncoder
+    TimeMAEDecoupledEncoder,
+)
+from layers.TimeMAE_downstream import (
+    TimeMAEClassifyHead,
+    TimeMAEForecastHead,
 )
 
 
@@ -148,3 +153,81 @@ class TimeMAE(nn.Module):
             return x
         else:
             raise ValueError("mode should be one of ['linear_probability', 'classification', 'forecasting']")
+
+
+class TimeMAEClassify(nn.Module):
+    def __init__(
+            self,
+            args: Namespace,
+            origin_seq_len: int,
+            num_features: int,
+    ):
+        super(TimeMAEClassify, self).__init__()
+
+        self.TimeMAE_encoder = TimeMAE(
+            args=args,
+            origin_seq_len=origin_seq_len,
+            num_features=num_features
+        )
+
+        self.classify_head = TimeMAEClassifyHead(
+            d_model=args.d_model,
+            num_classes=args.num_classes
+        )
+
+    def forward(self, x, fine_tuning_mode: str = 'fine_all'):
+        if fine_tuning_mode == 'fine_all':
+            x = self.TimeMAE_encoder(x, mode='classification')
+            x = self.classify_head(x)
+        elif fine_tuning_mode == 'fine_last':
+            with torch.no_grad():
+                x = self.TimeMAE_encoder(x, mode='classification')
+            x = self.classify_head(x)
+        else:
+            raise ValueError("fine_tuning_mode should be one of ['fine_all', 'fine_last']")
+        return x
+
+
+class TimeMAEForecast(nn.Module):
+    def __init__(
+            self,
+            args: Namespace,
+            origin_seq_len: int,
+            num_features: int,
+    ):
+        super(TimeMAEForecast, self).__init__()
+
+        self.TimeMAE_encoder = TimeMAE(
+            args=args,
+            origin_seq_len=origin_seq_len,
+            num_features=num_features
+        )
+
+        self.revin_layer = RevIN(
+            num_features=num_features,
+        )
+
+        self.seq_len = int(origin_seq_len / args.kernel_size)
+        self.forecast_head = TimeMAEForecastHead(
+            seq_len=self.seq_len,
+            d_model=args.d_model,
+            pred_len=args.pred_len,
+            num_features=num_features
+        )
+
+    def forward(self, x, fine_tuning_mode: str = 'fine_all'):
+        if fine_tuning_mode == 'fine_all':
+            x = self.revin_layer(x, 'norm')
+            x = self.TimeMAE_encoder(x, mode='forecasting')
+            x = self.forecast_head(x)
+            x = self.revin_layer(x, 'denorm')
+        elif fine_tuning_mode == 'fine_last':
+            with torch.no_grad():
+                x = self.revin_layer(x, 'norm')
+                x = self.TimeMAE_encoder(x, mode='forecasting')
+            x = self.forecast_head(x)
+            with torch.no_grad():
+                x = self.revin_layer(x, 'denorm')
+        else:
+            raise ValueError("fine_tuning_mode should be one of ['fine_all', 'fine_last']")
+        return x
