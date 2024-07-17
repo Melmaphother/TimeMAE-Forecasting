@@ -95,6 +95,11 @@ class TimeMAE(nn.Module):
             vocab_size=self.vocab_size
         )
 
+    def copy_weight(self):
+        with torch.no_grad():
+            for (param_a, param_b) in zip(self.encoder.parameters(), self.momentum_encoder.parameters()):
+                param_b.data = param_a.data
+
     def momentum_update(self):
         with torch.no_grad():
             for (param_a, param_b) in zip(self.encoder.parameters(), self.momentum_encoder.parameters()):

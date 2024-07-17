@@ -63,9 +63,9 @@ class ETTDataset(Dataset):
             # val: 4 months = [34560, 46080) samples = 11520 samples
             # test: 4 months = [46080, 57600) samples = 11520 samples
         }
-        self.__read_data__()
+        self.__read_data()
 
-    def __read_data__(self):
+    def __read_data(self):
         file_path = Path(self.args.data_dir) / 'ETT-small' / f'{self.file_name}.csv'
         ett_data = pd.read_csv(file_path, index_col='date', parse_dates=True)
         ett_data = ett_data.to_numpy(dtype=np.float32)
@@ -131,9 +131,9 @@ class HARDataset(Dataset):
         self.flag = flag
         self.scale = scale
         self.scaler = StandardScaler()
-        self.__read_data__()
+        self.__read_data()
 
-    def __read_data__(self):
+    def __read_data(self):
         train_file_path = Path(self.args.data_dir) / 'HAR' / 'train.pt'
         val_file_path = Path(self.args.data_dir) / 'HAR' / 'val.pt'
         test_file_path = Path(self.args.data_dir) / 'HAR' / 'test.pt'

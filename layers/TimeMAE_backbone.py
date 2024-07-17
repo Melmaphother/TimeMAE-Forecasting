@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class FeatureExtractor(nn.Module):
@@ -51,7 +50,7 @@ class CodeBook(nn.Module):
         """
         batch_size, seq_len, d_model = x.shape
         probs = self.code_word(x.view(-1, d_model))
-        probs = F.gumbel_softmax(probs)
+        probs = nn.functional.gumbel_softmax(probs)
         idx = probs.max(-1, keepdim=True)[1]
         return idx.view(batch_size, seq_len)
 
