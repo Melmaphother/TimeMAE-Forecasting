@@ -128,3 +128,23 @@ class TimeMAE(nn.Module):
         mask_words_prediction = self.code_book.get_code_word(rep_mask_prediction)
 
         return [rep_mask, rep_mask_prediction], [mask_words, mask_words_prediction]
+
+    def forward(self, x, mode: str = "classification"):
+        if mode == 'linear_probability':
+            with torch.no_grad():
+                x = self.feature_extractor(x)
+                x += self.positional_encoding(x)
+                x = self.encoder(x)
+                return x
+        elif mode == 'classification':
+            x = self.feature_extractor(x)
+            x += self.positional_encoding(x)
+            x = self.encoder(x)
+            return x
+        elif mode == 'forecasting':
+            x = self.feature_extractor(x)
+            x += self.positional_encoding(x)
+            x = self.encoder(x)
+            return x
+        else:
+            raise ValueError("mode should be one of ['linear_probability', 'classification', 'forecasting']")
