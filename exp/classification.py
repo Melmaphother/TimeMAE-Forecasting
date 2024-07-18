@@ -14,6 +14,7 @@ from torcheval.metrics import (
     MulticlassRecall,
     MulticlassF1Score,
 )
+from models.TimeMAE import TimeMAEClassifyForFinetune
 
 
 @dataclass
@@ -41,7 +42,7 @@ class TimeMAEClassificationFinetune:
     def __init__(
             self,
             args: Namespace,
-            model: nn.Module,
+            model: TimeMAEClassifyForFinetune,
             train_loader: DataLoader,
             val_loader: DataLoader,
     ):
@@ -67,11 +68,11 @@ class TimeMAEClassificationFinetune:
         )
 
         # Evaluation Metrics
-        self.accuracy = MulticlassAccuracy()
-        self.precision = MulticlassPrecision()
-        self.recall = MulticlassRecall()
-        self.micro_f1_score = MulticlassF1Score(average="micro")
-        self.macro_f1_score = MulticlassF1Score(average="macro")
+        self.accuracy = MulticlassAccuracy(device=args.device)
+        self.precision = MulticlassPrecision(device=args.device)
+        self.recall = MulticlassRecall(device=args.device)
+        self.micro_f1_score = MulticlassF1Score(average="micro", device=args.device)
+        self.macro_f1_score = MulticlassF1Score(average="macro", device=args.device)
 
         # Save Path
         self.train_result_save_path = Path(args.save_dir) / "finetune_train.csv"
@@ -231,11 +232,11 @@ def classification_finetune_test(
     ])
     df.to_csv(test_result_save_path, index=False)
 
-    accuracy = MulticlassAccuracy()
-    precision = MulticlassPrecision()
-    recall = MulticlassRecall()
-    micro_f1_score = MulticlassF1Score(average="micro")
-    macro_f1_score = MulticlassF1Score(average="macro")
+    accuracy = MulticlassAccuracy(device=args.device)
+    precision = MulticlassPrecision(device=args.device)
+    recall = MulticlassRecall(device=args.device)
+    micro_f1_score = MulticlassF1Score(average="micro", device=args.device)
+    macro_f1_score = MulticlassF1Score(average="macro", device=args.device)
 
     for (data, labels) in test_loader:
         outputs = model(data, finetune_mode=args.finetune_mode)

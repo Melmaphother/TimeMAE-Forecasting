@@ -271,7 +271,7 @@ class TimeMAEClassificationForPretrainEval(nn.Module):
             lr=args.lr
         )
 
-        self.accuracy = MulticlassAccuracy()
+        self.accuracy = MulticlassAccuracy(device=args.device)
 
     def fit(self, train_loader):
         self.model.train()
