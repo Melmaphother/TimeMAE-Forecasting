@@ -2,13 +2,13 @@ import torch
 import torch.nn as nn
 
 
-class ClassifyHead(nn.Module):
+class ClassificationHead(nn.Module):
     def __init__(
             self,
             d_model: int,
             num_classes: int,
     ):
-        super(ClassifyHead, self).__init__()
+        super(ClassificationHead, self).__init__()
         self.classify_head = nn.Linear(d_model, num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -22,7 +22,7 @@ class ClassifyHead(nn.Module):
         return self.classify_head(x)
 
 
-class ForecastHead(nn.Module):
+class ForecastingHead(nn.Module):
     def __init__(
             self,
             seq_len: int,
@@ -30,7 +30,7 @@ class ForecastHead(nn.Module):
             pred_len: int,
             num_features: int,
     ):
-        super(ForecastHead, self).__init__()
+        super(ForecastingHead, self).__init__()
         self.pred_len = pred_len
         self.num_features = num_features
         self.flatten = nn.Flatten()

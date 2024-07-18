@@ -44,7 +44,7 @@ class ETTDataset(Dataset):
         self.file_name = file_name
         self.freq = freq
         self.scale = scale
-        self.scaler = StandardScaler().to(args.device)
+        self.scaler = StandardScaler()
         self.slice_hour_map = {
             'train': slice(0, 12 * 30 * 24),
             'val': slice(12 * 30 * 24, 12 * 30 * 24 + 4 * 30 * 24),
@@ -130,7 +130,7 @@ class HARDataset(Dataset):
         self.args = args
         self.flag = flag
         self.scale = scale
-        self.scaler = StandardScaler().to(args.device)
+        self.scaler = StandardScaler()
         self.__read_data()
 
     def __read_data(self):

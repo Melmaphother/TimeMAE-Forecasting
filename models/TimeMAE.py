@@ -10,8 +10,8 @@ from layers.TimeMAE_backbone import (
     TransformerDecoupledEncoder,
 )
 from layers.TimeMAE_downstream import (
-    ClassifyHead,
-    ForecastHead,
+    ClassificationHead,
+    ForecastingHead,
 )
 
 
@@ -139,19 +139,19 @@ class TimeMAE(nn.Module):
 
         return [rep_mask, rep_mask_prediction], [mask_words, mask_words_prediction]
 
-    def forward(self, x, mode: str = "linear_probability"):
-        if mode == 'linear_probability':
+    def forward(self, x, task: str = "linear_probability"):
+        if task == 'linear_probability':
             with torch.no_grad():
                 x = self.feature_extractor(x)
                 x += self.positional_encoding(x)
                 x = self.encoder(x)
                 return x
-        elif mode == 'classification':
+        elif task == 'classification':
             x = self.feature_extractor(x)
             x += self.positional_encoding(x)
             x = self.encoder(x)
             return x
-        elif mode == 'forecasting':
+        elif task == 'forecasting':
             x = self.feature_extractor(x)
             x += self.positional_encoding(x)
             x = self.encoder(x)
@@ -170,16 +170,16 @@ class TimeMAEClassifyForFinetune(nn.Module):
 
         self.TimeMAE_encoder = TimeMAE_encoder
 
-        self.classify_head = ClassifyHead(
+        self.classify_head = ClassificationHead(
             d_model=args.d_model,
             num_classes=args.num_classes
         ).to(args.device)
 
-    def forward(self, x, fine_tuning_mode: str = 'fine_all'):
-        if fine_tuning_mode == 'fine_all':
+    def forward(self, x, finetune_mode: str = 'fine_all'):
+        if finetune_mode == 'fine_all':
             x = self.TimeMAE_encoder(x, mode='classification')
             x = self.classify_head(x)
-        elif fine_tuning_mode == 'fine_last':
+        elif finetune_mode == 'fine_last':
             with torch.no_grad():
                 x = self.TimeMAE_encoder(x, mode='classification')
             x = self.classify_head(x)
@@ -205,20 +205,20 @@ class TimeMAEForecastForFinetune(nn.Module):
         ).to(args.device)
 
         self.seq_len = int(origin_seq_len / args.kernel_size)
-        self.forecast_head = ForecastHead(
+        self.forecast_head = ForecastingHead(
             seq_len=self.seq_len,
             d_model=args.d_model,
             pred_len=args.pred_len,
             num_features=num_features
         ).to(args.device)
 
-    def forward(self, x, fine_tuning_mode: str = 'fine_all'):
-        if fine_tuning_mode == 'fine_all':
+    def forward(self, x, finetune_mode: str = 'fine_all'):
+        if finetune_mode == 'fine_all':
             x = self.revin_layer(x, 'norm')
             x = self.TimeMAE_encoder(x, mode='forecasting')
             x = self.forecast_head(x)
             x = self.revin_layer(x, 'denorm')
-        elif fine_tuning_mode == 'fine_last':
+        elif finetune_mode == 'fine_last':
             with torch.no_grad():
                 x = self.revin_layer(x, 'norm')
                 x = self.TimeMAE_encoder(x, mode='forecasting')

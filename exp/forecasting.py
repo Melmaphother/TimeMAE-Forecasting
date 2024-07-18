@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 
-class TimeMAEForecastFinetune:
+class TimeMAEForecastingFinetune:
     def __init__(
             self,
     ):

@@ -156,7 +156,7 @@ class Trainer():
         self.model.train()
         tqdm_dataloader = tqdm(self.train_linear_loader) if self.verbose else self.train_linear_loader
 
-        loss_sum = 0
+        loss_sum = 0.0
         for idx, batch in enumerate(tqdm_dataloader):
             batch = [x.to(self.device) for x in batch]
 
