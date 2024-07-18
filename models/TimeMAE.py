@@ -6,12 +6,12 @@ from layers.TimeMAE_backbone import (
     FeatureExtractor,
     CodeBook,
     PositionalEncoding,
-    TimeMAEEncoder,
-    TimeMAEDecoupledEncoder,
+    TransformerEncoder,
+    TransformerDecoupledEncoder,
 )
 from layers.TimeMAE_downstream import (
-    TimeMAEClassifyHead,
-    TimeMAEForecastHead,
+    ClassifyHead,
+    ForecastHead,
 )
 
 
@@ -60,7 +60,7 @@ class TimeMAE(nn.Module):
         # TimeMAE Encoder
         self.mask_len = int(args.mask_ratio * self.seq_len)
         self.replaced_mask = nn.Parameter(torch.randn(self.d_model, ))
-        self.encoder = TimeMAEEncoder(
+        self.encoder = TransformerEncoder(
             d_model=self.d_model,
             nhead=self.nhead,
             dim_feedforward=self.dim_feedforward,
@@ -70,7 +70,7 @@ class TimeMAE(nn.Module):
         )
 
         # TimeMAE Decoupled Encoder
-        self.decoupled_encoder = TimeMAEDecoupledEncoder(
+        self.decoupled_encoder = TransformerDecoupledEncoder(
             d_model=self.d_model,
             nhead=self.nhead,
             dim_feedforward=self.dim_feedforward,
@@ -80,7 +80,7 @@ class TimeMAE(nn.Module):
         )
 
         # For Calculate MRR Loss
-        self.momentum_encoder = TimeMAEEncoder(
+        self.momentum_encoder = TransformerEncoder(
             d_model=self.d_model,
             nhead=self.nhead,
             dim_feedforward=self.dim_feedforward,
@@ -139,7 +139,7 @@ class TimeMAE(nn.Module):
 
         return [rep_mask, rep_mask_prediction], [mask_words, mask_words_prediction]
 
-    def forward(self, x, mode: str = "classification"):
+    def forward(self, x, mode: str = "linear_probability"):
         if mode == 'linear_probability':
             with torch.no_grad():
                 x = self.feature_extractor(x)
@@ -160,25 +160,20 @@ class TimeMAE(nn.Module):
             raise ValueError("mode should be one of ['linear_probability', 'classification', 'forecasting']")
 
 
-class TimeMAEClassify(nn.Module):
+class TimeMAEClassifyForFinetune(nn.Module):
     def __init__(
             self,
             args: Namespace,
-            origin_seq_len: int,
-            num_features: int,
+            TimeMAE_encoder: TimeMAE,
     ):
-        super(TimeMAEClassify, self).__init__()
+        super(TimeMAEClassifyForFinetune, self).__init__()
 
-        self.TimeMAE_encoder = TimeMAE(
-            args=args,
-            origin_seq_len=origin_seq_len,
-            num_features=num_features
-        )
+        self.TimeMAE_encoder = TimeMAE_encoder
 
-        self.classify_head = TimeMAEClassifyHead(
+        self.classify_head = ClassifyHead(
             d_model=args.d_model,
             num_classes=args.num_classes
-        )
+        ).to(args.device)
 
     def forward(self, x, fine_tuning_mode: str = 'fine_all'):
         if fine_tuning_mode == 'fine_all':
@@ -193,32 +188,29 @@ class TimeMAEClassify(nn.Module):
         return x
 
 
-class TimeMAEForecast(nn.Module):
+class TimeMAEForecastForFinetune(nn.Module):
     def __init__(
             self,
             args: Namespace,
+            TimeMAE_encoder: TimeMAE,
             origin_seq_len: int,
             num_features: int,
     ):
-        super(TimeMAEForecast, self).__init__()
+        super(TimeMAEForecastForFinetune, self).__init__()
 
-        self.TimeMAE_encoder = TimeMAE(
-            args=args,
-            origin_seq_len=origin_seq_len,
-            num_features=num_features
-        )
+        self.TimeMAE_encoder = TimeMAE_encoder
 
         self.revin_layer = RevIN(
             num_features=num_features,
-        )
+        ).to(args.device)
 
         self.seq_len = int(origin_seq_len / args.kernel_size)
-        self.forecast_head = TimeMAEForecastHead(
+        self.forecast_head = ForecastHead(
             seq_len=self.seq_len,
             d_model=args.d_model,
             pred_len=args.pred_len,
             num_features=num_features
-        )
+        ).to(args.device)
 
     def forward(self, x, fine_tuning_mode: str = 'fine_all'):
         if fine_tuning_mode == 'fine_all':

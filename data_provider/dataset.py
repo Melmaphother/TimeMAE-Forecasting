@@ -4,7 +4,7 @@ import torch
 from pathlib import Path
 from argparse import Namespace
 from torch.utils.data import Dataset
-from sklearn.preprocessing import StandardScaler
+from preprocessing import StandardScaler
 
 
 class ETTDataset(Dataset):
@@ -44,7 +44,7 @@ class ETTDataset(Dataset):
         self.file_name = file_name
         self.freq = freq
         self.scale = scale
-        self.scaler = StandardScaler()
+        self.scaler = StandardScaler().to(args.device)
         self.slice_hour_map = {
             'train': slice(0, 12 * 30 * 24),
             'val': slice(12 * 30 * 24, 12 * 30 * 24 + 4 * 30 * 24),
@@ -73,7 +73,7 @@ class ETTDataset(Dataset):
         if self.scale:
             train_slice = self.slice_hour_map['train'] if self.freq == 'h' else self.slice_15_min_map['train']
             self.scaler.fit(ett_data[train_slice])
-            ett_data = self.scaler.transform(ett_data)
+            ett_data = self.scaler(ett_data)
 
         _slice = self.slice_hour_map[self.flag] if self.freq == 'h' else self.slice_15_min_map[self.flag]
         self.data = ett_data[_slice]
@@ -130,7 +130,7 @@ class HARDataset(Dataset):
         self.args = args
         self.flag = flag
         self.scale = scale
-        self.scaler = StandardScaler()
+        self.scaler = StandardScaler().to(args.device)
         self.__read_data()
 
     def __read_data(self):
@@ -144,9 +144,9 @@ class HARDataset(Dataset):
 
         if self.scale:
             self.scaler.fit(train_data)
-            train_data = self.scaler.transform(train_data)
-            val_data = self.scaler.transform(val_data)
-            test_data = self.scaler.transform(test_data)
+            train_data = self.scaler(train_data)
+            val_data = self.scaler(val_data)
+            test_data = self.scaler(test_data)
 
         match self.flag:
             case 'train':

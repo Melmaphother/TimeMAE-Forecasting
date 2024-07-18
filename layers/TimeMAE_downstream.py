@@ -2,13 +2,13 @@ import torch
 import torch.nn as nn
 
 
-class TimeMAEClassifyHead(nn.Module):
+class ClassifyHead(nn.Module):
     def __init__(
             self,
             d_model: int,
             num_classes: int,
     ):
-        super(TimeMAEClassifyHead, self).__init__()
+        super(ClassifyHead, self).__init__()
         self.classify_head = nn.Linear(d_model, num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -22,7 +22,7 @@ class TimeMAEClassifyHead(nn.Module):
         return self.classify_head(x)
 
 
-class TimeMAEForecastHead(nn.Module):
+class ForecastHead(nn.Module):
     def __init__(
             self,
             seq_len: int,
@@ -30,7 +30,7 @@ class TimeMAEForecastHead(nn.Module):
             pred_len: int,
             num_features: int,
     ):
-        super(TimeMAEForecastHead, self).__init__()
+        super(ForecastHead, self).__init__()
         self.pred_len = pred_len
         self.num_features = num_features
         self.flatten = nn.Flatten()

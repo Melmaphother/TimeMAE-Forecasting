@@ -125,7 +125,7 @@ class ResidualConnection(nn.Module):
             return x + self.dropout(sublayer(self.norm(x)))
 
 
-class TimeMAEEncoderLayer(nn.Module):
+class TransformerEncoderLayer(nn.Module):
     def __init__(
             self,
             d_model: int,
@@ -134,7 +134,7 @@ class TimeMAEEncoderLayer(nn.Module):
             dropout: float,
             enable_res_param: bool,
     ):
-        super(TimeMAEEncoderLayer, self).__init__()
+        super(TransformerEncoderLayer, self).__init__()
         self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
         # Feedforward
         self.feedforward = nn.Sequential(
@@ -160,7 +160,7 @@ class TimeMAEEncoderLayer(nn.Module):
         return x
 
 
-class TimeMAEDecoupledEncoderLayer(nn.Module):
+class TransformerDecoupledEncoderLayer(nn.Module):
     def __init__(
             self,
             d_model: int,
@@ -169,7 +169,7 @@ class TimeMAEDecoupledEncoderLayer(nn.Module):
             dropout: float,
             enable_res_param: bool,
     ):
-        super(TimeMAEDecoupledEncoderLayer, self).__init__()
+        super(TransformerDecoupledEncoderLayer, self).__init__()
         self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
         # Feedforward
         self.feedforward = nn.Sequential(
@@ -197,7 +197,7 @@ class TimeMAEDecoupledEncoderLayer(nn.Module):
         return x
 
 
-class TimeMAEEncoder(nn.Module):
+class TransformerEncoder(nn.Module):
     def __init__(
             self,
             d_model: int,
@@ -207,9 +207,9 @@ class TimeMAEEncoder(nn.Module):
             num_layers: int,
             enable_res_param: bool,
     ):
-        super(TimeMAEEncoder, self).__init__()
+        super(TransformerEncoder, self).__init__()
         self.encoder = nn.ModuleList([
-            TimeMAEEncoderLayer(
+         TransformerEncoderLayer(
                 d_model=d_model,
                 nhead=nhead,
                 dim_feedforward=dim_feedforward,
@@ -232,7 +232,7 @@ class TimeMAEEncoder(nn.Module):
         return x
 
 
-class TimeMAEDecoupledEncoder(nn.Module):
+class TransformerDecoupledEncoder(nn.Module):
     def __init__(
             self,
             d_model: int,
@@ -242,9 +242,9 @@ class TimeMAEDecoupledEncoder(nn.Module):
             num_layers: int,
             enable_res_param: bool,
     ):
-        super(TimeMAEDecoupledEncoder, self).__init__()
+        super(TransformerDecoupledEncoder, self).__init__()
         self.decoupled_encoder = nn.ModuleList([
-            TimeMAEDecoupledEncoderLayer(
+         TransformerDecoupledEncoderLayer(
                 d_model=d_model,
                 nhead=nhead,
                 dim_feedforward=dim_feedforward,

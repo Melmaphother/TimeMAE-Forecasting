@@ -5,10 +5,12 @@ from torch.utils.data import DataLoader
 from argparse import Namespace
 from pathlib import Path
 from dataclasses import dataclass
-
 from tqdm import tqdm
-from torch.optim import AdamW
+from torch.optim import AdamW, Adam
 from torch.optim.lr_scheduler import LambdaLR
+from models.TimeMAE import TimeMAE
+from layers.TimeMAE_downstream import ClassifyHead
+from torcheval.metrics import MulticlassAccuracy
 
 
 @dataclass
@@ -18,24 +20,27 @@ class Metrics:
     loss_mrr: float = 0
     hits: float = 0
     ndcg: float = 0
+    accuracy: float = 0
 
 
-class TimeMAEPretrain:
+class TimeMAESelfSupervisedPretrain:
     def __init__(
             self,
             args: Namespace,
-            model: nn.Module,
+            model: TimeMAE,
             train_loader: DataLoader,
             val_loader: DataLoader,
+            mode: str = 'classification',
     ):
         self.args = args
         self.model = model.to(args.device)
         self.train_loader = tqdm(train_loader, desc="Training") if args.verbose else train_loader
         self.val_loader = tqdm(val_loader, desc="Validation") if args.verbose else val_loader
+        self.mode = mode
 
         # Loss Function
-        self.loss_mcc_fn = nn.CrossEntropyLoss()  # MCC means masked codeword classification
-        self.loss_mrr_fn = nn.MSELoss()  # MRR means masked representation regression
+        self.mcc_criterion = nn.CrossEntropyLoss()  # MCC means masked codeword classification
+        self.mrr_criterion = nn.MSELoss()  # MRR means masked representation regression
         self.alpha = args.alpha
         self.beta = args.beta
 
@@ -54,8 +59,8 @@ class TimeMAEPretrain:
         )
 
         # Save result
-        self.train_result_save_path = Path(args.save_dir) / 'pretrain_train_result.csv'
-        self.val_result_save_path = Path(args.save_dir) / 'pretrain_val_result.csv'
+        self.train_result_save_path = Path(args.save_dir) / 'pretrain_train.csv'
+        self.val_result_save_path = Path(args.save_dir) / 'pretrain_val.csv'
         self.model_save_path = Path(args.save_dir) / 'pretrain_model.pth'
         self.df = pd.DataFrame(columns=[
             'Epoch',
@@ -119,8 +124,8 @@ class TimeMAEPretrain:
             ([rep_mask, rep_mask_prediction],
              [mask_words, mask_words_prediction]) = self.model.pretrain_forward(data)
 
-            loss_mcc = self.loss_mcc_fn(mask_words_prediction, mask_words)
-            loss_mrr = self.loss_mrr_fn(rep_mask, rep_mask_prediction)
+            loss_mcc = self.mcc_criterion(mask_words_prediction, mask_words)
+            loss_mrr = self.mrr_criterion(rep_mask, rep_mask_prediction)
             loss_sum = self.alpha * loss_mcc + self.beta * loss_mrr
             metrics.loss_mcc += loss_mcc.item()
             metrics.loss_mrr += loss_mrr.item()
@@ -143,19 +148,134 @@ class TimeMAEPretrain:
     def __validate_one_epoch(self) -> Metrics:
         self.model.eval()
         metrics = Metrics()
-        for (data, _) in self.val_loader:
+        for (val_data, labels) in self.val_loader:
+            # Pretrain Validation
             ([rep_mask, rep_mask_prediction],
-             [mask_words, mask_words_prediction]) = self.model.pretrain_forward(data)
+             [mask_words, mask_words_prediction]) = self.model.pretrain_forward(val_data)
 
-            loss_mcc = self.loss_mcc_fn(mask_words_prediction, mask_words)
-            loss_mrr = self.loss_mrr_fn(rep_mask, rep_mask_prediction)
+            loss_mcc = self.mcc_criterion(mask_words_prediction, mask_words)
+            loss_mrr = self.mrr_criterion(rep_mask, rep_mask_prediction)
             loss_sum = self.alpha * loss_mcc + self.beta * loss_mrr
             metrics.loss_mcc += loss_mcc.item()
             metrics.loss_mrr += loss_mrr.item()
             metrics.loss_sum += loss_sum.item()
+
+            # Classification Validation when pretraining
+            if self.mode == 'classification':
+                pretrain_eval = TimeMAEClassifyForPretrainEval(
+                    args=self.args,
+                    TimeMAE_encoder=self.model
+                )
+                pretrain_eval.fit(self.train_loader)
+                accuracy = pretrain_eval.score(self.val_loader)
+                metrics.accuracy = accuracy
 
         metrics.loss_mcc /= len(self.val_loader)
         metrics.loss_mrr /= len(self.val_loader)
         metrics.loss_sum /= len(self.val_loader)
 
         return metrics
+
+
+@torch.no_grad()
+def pretrain_test(
+        args: Namespace,
+        model: nn.Module,
+        test_loader: DataLoader,
+):
+    model.eval()
+    mcc_criterion = nn.CrossEntropyLoss()
+    mrr_criterion = nn.MSELoss()
+    alpha = args.alpha
+    beta = args.beta
+
+    test_loader = tqdm(test_loader, desc="Testing") if args.verbose else test_loader
+
+    metrics = Metrics()
+    test_result_save_path = Path(args.save_dir) / 'pretrain_test.csv'
+    df = pd.DataFrame(columns=[
+        'Loss Sum',  # Loss Sum = alpha * Loss MCC (CE) + beta * Loss MRR (MSE)
+        'Loss MCC (CE)',
+        'Loss MRR (MSE)',
+        'Hits',
+        'NDCG@10'
+    ])
+    df.to_csv(test_result_save_path, index=False)
+
+    for (data, _) in test_loader:
+        ([rep_mask, rep_mask_prediction],
+         [mask_words, mask_words_prediction]) = model.pretrain_forward(data)
+
+        loss_mcc = mcc_criterion(mask_words_prediction, mask_words)
+        loss_mrr = mrr_criterion(rep_mask, rep_mask_prediction)
+        loss_sum = alpha * loss_mcc + beta * loss_mrr
+        metrics.loss_mcc += loss_mcc.item()
+        metrics.loss_mrr += loss_mrr.item()
+        metrics.loss_sum += loss_sum.item()
+
+    metrics.loss_mcc /= len(test_loader)
+    metrics.loss_mrr /= len(test_loader)
+    metrics.loss_sum /= len(test_loader)
+
+    df = df.append({
+        'Loss Sum': metrics.loss_sum,
+        'Loss MCC (CE)': metrics.loss_mcc,
+        'Loss MRR (MSE)': metrics.loss_mrr,
+        'Hits': metrics.hits,
+        'NDCG@10': metrics.ndcg
+    }, ignore_index=True)
+    df.to_csv(test_result_save_path, index=False)
+
+    if args.verbose:
+        _metrics = f"""Pretrain Test | \
+                    Loss Sum: {metrics.loss_sum:.4f} | \
+                    Loss MCC (CE): {metrics.loss_mcc:.4f} | \
+                    Loss MRR (MSE): {metrics.loss_mrr:.4f} | \
+                    Hits: {metrics.hits:.4f} | \
+                    NDCG@10: {metrics.ndcg:.4f}"""
+        print(_metrics)
+
+
+class TimeMAEClassifyForPretrainEval(nn.Module):
+    def __init__(
+            self,
+            args: Namespace,
+            TimeMAE_encoder: TimeMAE,
+    ):
+        super(TimeMAEClassifyForPretrainEval, self).__init__()
+        self.args = args
+        self.TimeMAE_encoder = TimeMAE_encoder
+        self.classify_head = ClassifyHead(
+            d_model=args.d_model,
+            num_classes=args.num_classes
+        ).to(args.device)
+        self.criterion = nn.CrossEntropyLoss()
+        self.optimizer = Adam(
+            self.TimeMAE_encoder.parameters(),
+            lr=args.lr
+        )
+
+        self.accuracy = MulticlassAccuracy()
+
+    def fit(self, train_loader):
+        self.model.train()
+        for (data, labels) in train_loader:
+            self.optimizer.zero_grad()
+            with torch.no_grad():
+                x = self.TimeMAE_encoder(data, mode='classification')  # Don't update TimeMAE_encoder
+            outputs = self.classify_head(x)
+            loss = self.criterion(outputs, labels)
+            loss.backward()
+            self.optimizer.step()
+
+    @torch.no_grad()
+    def score(self, val_loader):
+        self.model.eval()
+        self.accuracy.reset()
+        for (data, labels) in val_loader:
+            x = self.TimeMAE_encoder(data, mode='classification')
+            outputs = self.classify_head(x)
+            _, predicts = torch.max(outputs, -1)
+            self.accuracy.update(predicts, labels)
+
+        return self.accuracy.compute()
