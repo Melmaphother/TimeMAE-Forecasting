@@ -12,30 +12,30 @@ def get_args() -> argparse.Namespace:
     parser.add_argument('--save_dir', type=str, default='results', help='save results or models directory')
 
     # DataLoader
-    parser.add_argument('--train_batch_size', type=int, default=32, help='batch size for training')
-    parser.add_argument('--val_batch_size', type=int, default=32, help='batch size for validation')
-    parser.add_argument('--test_batch_size', type=int, default=32, help='batch size for testing')
+    parser.add_argument('--train_batch_size', type=int, default=128, help='batch size for training')
+    parser.add_argument('--val_batch_size', type=int, default=128, help='batch size for validation')
+    parser.add_argument('--test_batch_size', type=int, default=128, help='batch size for testing')
     parser.add_argument('--num_workers', type=int, default=4, help='number of workers for DataLoader')
 
     # Data Features, (batch_size, seq_len, num_features)
     parser.add_argument('--seq_len', type=int, default=128, help='sequence length')
-    parser.add_argument('--num_features', type=int, default=7, help='number of features')
+    parser.add_argument('--num_features', type=int, default=9, help='number of features or channels')
 
     # Model Hyperparameters
     # Transformer Encoder
-    parser.add_argument('--vocab_size', type=int, default=512, help='vocab size')
-    parser.add_argument('--d_model', type=int, default=512, help='dimension of model')
-    parser.add_argument('--nhead', type=int, default=8, help='number of heads')
-    parser.add_argument('--dim_feedforward', type=int, default=2048, help='dimension of feedforward')
-    parser.add_argument('--dropout', type=float, default=0.1, help='dropout rate')
-    parser.add_argument('--num_layers', type=int, default=6, help='number of layers')
-    parser.add_argument('--enable_res_param', type=bool, default=False, help='enable residual parameter')
+    parser.add_argument('--vocab_size', type=int, default=192, help='vocab size')
+    parser.add_argument('--d_model', type=int, default=64, help='dimension of model')
+    parser.add_argument('--nhead', type=int, default=4, help='number of heads')
+    parser.add_argument('--dim_feedforward', type=int, default=256, help='dimension of feedforward')
+    parser.add_argument('--dropout', type=float, default=0.2, help='dropout rate')
+    parser.add_argument('--num_layers', type=int, default=8, help='number of layers')
+    parser.add_argument('--enable_res_param', type=bool, default=True, help='enable residual parameter')
     # Conv1D
-    parser.add_argument('--kernel_size', type=int, default=3, help='kernel size')
+    parser.add_argument('--kernel_size', type=int, default=8, help='kernel size')
     # Decoupled Transformer Encoder
-    parser.add_argument('--decouple_num_layers', type=int, default=2, help='number of decoupled layers')
+    parser.add_argument('--num_layers_decoupled', type=int, default=4, help='number of decoupled layers')
     # Momentum Transformer Encoder
-    parser.add_argument('--momentum', type=float, default=0.9, help='momentum rate')
+    parser.add_argument('--momentum', type=float, default=0.99, help='momentum rate')
 
     # Pretrain
     parser.add_argument('--task', type=str, default='classification', help='task type')
@@ -45,7 +45,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument('--beta', type=float, default=0.1, help='beta')
     parser.add_argument('--num_epochs_pretrain', type=int, default=100, help='number of epochs for pretrain')
     parser.add_argument('--eval_per_epochs_pretrain', type=int, default=1, help='evaluation per epochs for pretrain')
-    parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
+    parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
     parser.add_argument('--weight_decay', type=float, default=1e-4, help='weight decay')
 
     # Finetune

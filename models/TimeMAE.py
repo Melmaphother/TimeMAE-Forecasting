@@ -31,7 +31,7 @@ class TimeMAE(nn.Module):
         self.dim_feedforward = args.dim_feedforward
         self.dropout = args.dropout
         self.num_layers = args.num_layers
-        self.decouple_num_layers = args.decouple_num_layers
+        self.num_layers_decoupled = args.num_layers_decoupled
         self.enable_res_param = args.enable_res_param
         self.device = args.device
 
@@ -74,7 +74,7 @@ class TimeMAE(nn.Module):
             d_model=self.d_model,
             nhead=self.nhead,
             dim_feedforward=self.dim_feedforward,
-            num_layers=self.decouple_num_layers,
+            num_layers=self.num_layers_decoupled,
             enable_res_param=self.enable_res_param,
             dropout=self.dropout
         )
