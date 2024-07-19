@@ -13,17 +13,20 @@ def data_provider(args: Namespace):
         train_loader = DataLoader(
             train_dataset,
             batch_size=args.train_batch_size,
-            shuffle=True
+            shuffle=True,
+            num_workers=args.num_workers,
         )
         val_loader = DataLoader(
             val_dataset,
             batch_size=args.test_batch_size,
-            shuffle=False
+            shuffle=False,
+            num_workers=args.num_workers,
         )
         test_loader = DataLoader(
             test_dataset,
             batch_size=args.test_batch_size,
-            shuffle=False
+            shuffle=False,
+            num_workers=args.num_workers,
         )
     elif args.task == 'forecasting':
         train_dataset = ETTDataset(args, flag='train')
@@ -33,17 +36,20 @@ def data_provider(args: Namespace):
         train_loader = DataLoader(
             train_dataset,
             batch_size=args.train_batch_size,
-            shuffle=True
+            shuffle=True,
+            num_workers=args.num_workers,
         )
         val_loader = DataLoader(
             val_dataset,
             batch_size=args.test_batch_size,
-            shuffle=False
+            shuffle=False,
+            num_workers=args.num_workers,
         )
         test_loader = DataLoader(
             test_dataset,
             batch_size=args.test_batch_size,
-            shuffle=False
+            shuffle=False,
+            num_workers=args.num_workers,
         )
     else:
         raise ValueError(f'Invalid task: {args.task=}', 'task should be one of [classification, forecasting]')
