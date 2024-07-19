@@ -1,4 +1,3 @@
-import torch.nn as nn
 from argparse import Namespace
 from dataset import ETTDataset, HARDataset
 from torch.utils.data import DataLoader

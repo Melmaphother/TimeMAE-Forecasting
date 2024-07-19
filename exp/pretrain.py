@@ -144,7 +144,7 @@ class Pretrain:
             }, ignore_index=True)
             self.test_df.to_csv(self.test_result_save_path, index=False)
         else:
-            raise ValueError(f"Invalid mode: {mode}, mode should be 'train' or 'val'.")
+            raise ValueError(f"Invalid mode: {mode}, mode should be 'train', 'val' or 'test'.")
 
     def pretrain(self):
         self.train_df.to_csv(self.train_result_save_path, index=False)

@@ -6,6 +6,7 @@ from pathlib import Path
 from argparse import Namespace
 from torch.utils.data import Dataset
 
+
 class ETTDataset(Dataset):
     def __init__(
             self,
