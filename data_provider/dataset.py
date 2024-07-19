@@ -87,6 +87,9 @@ class ETTDataset(Dataset):
         label_begin = input_end
         label_end = input_end + self.args.pred_len
 
+        # label_begin = input_end - self.args.label_len
+        # label_end = input_end + self.args.label_len + self.args.pred_len
+
         x = self.data[input_begin:input_end]
         y = self.data[label_begin:label_end]
 
