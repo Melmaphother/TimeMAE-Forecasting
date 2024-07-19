@@ -70,6 +70,10 @@ def get_args() -> argparse.Namespace:
     save_dir = Path(_args.save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
+    # save args
+    with open(save_dir / 'args.json', 'w') as f:
+        json.dump(vars(_args), f, indent=4)
+
     # mkdir pretrain, finetune save_dir
     pretrain_save_dir = save_dir / 'pretrain'
     pretrain_save_dir.mkdir(parents=True, exist_ok=True)
@@ -84,10 +88,6 @@ def get_args() -> argparse.Namespace:
         raise ValueError(f'Invalid task: {_args.task=}', 'task should be one of [classification, forecasting]')
 
     _args.finetune_save_dir = finetune_save_dir
-
-    # save args
-    with open(save_dir / 'args.json', 'w') as f:
-        json.dump(vars(_args), f, indent=4)
 
     # Device
     _args.device = torch.device(_args.device)

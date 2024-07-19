@@ -1,5 +1,5 @@
 from argparse import Namespace
-from dataset import ETTDataset, HARDataset
+from .dataset import ETTDataset, HARDataset
 from torch.utils.data import DataLoader
 
 

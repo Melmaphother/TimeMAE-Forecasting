@@ -1,3 +1,5 @@
 data_provider/ETT-small/
 data_provider/HAR
 .idea
+results/
+__pycache__/
