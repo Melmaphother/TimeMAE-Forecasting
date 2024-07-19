@@ -42,6 +42,7 @@ class Pretrain:
             model: TimeMAE,
             train_loader: DataLoader,
             val_loader: DataLoader,
+            test_loader: DataLoader,
             task: str,
             save_dir: Path,
     ):
@@ -59,6 +60,7 @@ class Pretrain:
         self.model = model.to(args.device)
         self.train_loader = tqdm(train_loader, desc="Training") if self.verbose else train_loader
         self.val_loader = tqdm(val_loader, desc="Validation") if self.verbose else val_loader
+        self.test_loader = tqdm(test_loader, desc="Testing") if self.verbose else test_loader
         self.task = task
 
         # Loss Function
@@ -83,6 +85,7 @@ class Pretrain:
         # Save result
         self.train_result_save_path = save_dir / 'pretrain_train.csv'
         self.val_result_save_path = save_dir / 'pretrain_val.csv'
+        self.test_result_save_path = save_dir / 'pretrain_test.csv'
         self.model_save_path = save_dir / 'pretrain_model.pth'
         self.train_df = pd.DataFrame(columns=[
             'Epoch',
@@ -92,7 +95,6 @@ class Pretrain:
             'Hits',
             'NDCG@10'
         ])
-        self.train_df.to_csv(self.train_result_save_path, index=False)
         self.val_df = pd.DataFrame(columns=[
             'Epoch',
             'Val Loss',
@@ -102,7 +104,13 @@ class Pretrain:
             'NDCG@10',
             'Accuracy'
         ])
-        self.val_df.to_csv(self.val_result_save_path, index=False)
+        self.test_df = pd.DataFrame(columns=[
+            'Test Loss',  # Loss Sum = alpha * Loss MCC (CE) + beta * Loss MRR (MSE)
+            'Loss MCC (CE)',
+            'Loss MRR (MSE)',
+            'Hits',
+            'NDCG@10'
+        ])
 
     def __append_to_csv(self, epoch: int, metrics: Metrics, mode: str = 'train'):
         if mode == 'train':
@@ -126,10 +134,21 @@ class Pretrain:
                 'Accuracy': metrics.accuracy
             }, ignore_index=True)
             self.val_df.to_csv(self.val_result_save_path, index=False)
+        elif mode == 'test':
+            self.test_df = self.test_df.append({
+                'Test Loss': metrics.loss_sum,
+                'Loss MCC (CE)': metrics.loss_mcc,
+                'Loss MRR (MSE)': metrics.loss_mrr,
+                'Hits': metrics.hits,
+                'NDCG@10': metrics.ndcg
+            }, ignore_index=True)
+            self.test_df.to_csv(self.test_result_save_path, index=False)
         else:
             raise ValueError(f"Invalid mode: {mode}, mode should be 'train' or 'val'.")
 
     def pretrain(self):
+        self.train_df.to_csv(self.train_result_save_path, index=False)
+        self.val_df.to_csv(self.val_result_save_path, index=False)
         self.model.copy_weight()  # align the weights of the model and momentum model
 
         best_val_loss = float('inf')
@@ -208,59 +227,50 @@ class Pretrain:
 
         return metrics
 
+    @torch.no_grad()
+    def pretrain_test(self):
+        self.test_df.to_csv(self.test_result_save_path, index=False)
+        # load model
+        model = TimeMAE(
+            args=self.args,
+            origin_seq_len=self.args.seq_len,
+            num_features=self.args.num_features,
+        ).to(self.args.device)
+        # test model if exists
+        if self.model_save_path.exists():
+            model.load_state_dict(torch.load(self.model_save_path))
+        else:
+            raise FileNotFoundError(f"Model not found in {self.model_save_path}")
 
-@torch.no_grad()
-def pretrain_test(
-        args: Namespace,
-        model: nn.Module,
-        test_loader: DataLoader,
-        save_dir: Path
-):
-    model.eval()
-    mcc_criterion = nn.CrossEntropyLoss()
-    mrr_criterion = nn.MSELoss()
-    alpha = args.alpha
-    beta = args.beta
+        model.eval()
+        metrics = Metrics()
+        for (data, _) in self.test_loader:
+            ([rep_mask, rep_mask_prediction],
+             [mask_words, mask_words_prediction]) = model.pretrain_forward(data)
 
-    test_loader = tqdm(test_loader, desc="Testing") if args.verbose else test_loader
+            loss_mcc = self.mcc_criterion(mask_words_prediction, mask_words)
+            loss_mrr = self.mrr_criterion(rep_mask, rep_mask_prediction)
+            loss_sum = self.alpha * loss_mcc + self.beta * loss_mrr
+            metrics.loss_mcc += loss_mcc.item()
+            metrics.loss_mrr += loss_mrr.item()
+            metrics.loss_sum += loss_sum.item()
 
-    metrics = Metrics()
-    test_result_save_path = save_dir / 'pretrain_test.csv'
-    df = pd.DataFrame(columns=[
-        'Test Loss',  # Loss Sum = alpha * Loss MCC (CE) + beta * Loss MRR (MSE)
-        'Loss MCC (CE)',
-        'Loss MRR (MSE)',
-        'Hits',
-        'NDCG@10'
-    ])
-    df.to_csv(test_result_save_path, index=False)
+            if self.task == 'classification':
+                pretrain_eval = TimeMAEClassificationForPretrainEval(
+                    args=self.args,
+                    TimeMAE_encoder=model
+                )
+                pretrain_eval.fit(self.train_loader)
+                accuracy = pretrain_eval.score(self.test_loader)
+                metrics.accuracy = accuracy
 
-    for (data, _) in test_loader:
-        ([rep_mask, rep_mask_prediction],
-         [mask_words, mask_words_prediction]) = model.pretrain_forward(data)
+        metrics.loss_mcc /= len(self.test_loader)
+        metrics.loss_mrr /= len(self.test_loader)
+        metrics.loss_sum /= len(self.test_loader)
 
-        loss_mcc = mcc_criterion(mask_words_prediction, mask_words)
-        loss_mrr = mrr_criterion(rep_mask, rep_mask_prediction)
-        loss_sum = alpha * loss_mcc + beta * loss_mrr
-        metrics.loss_mcc += loss_mcc.item()
-        metrics.loss_mrr += loss_mrr.item()
-        metrics.loss_sum += loss_sum.item()
-
-    metrics.loss_mcc /= len(test_loader)
-    metrics.loss_mrr /= len(test_loader)
-    metrics.loss_sum /= len(test_loader)
-
-    df = df.append({
-        'Test Loss': metrics.loss_sum,
-        'Loss MCC (CE)': metrics.loss_mcc,
-        'Loss MRR (MSE)': metrics.loss_mrr,
-        'Hits': metrics.hits,
-        'NDCG@10': metrics.ndcg
-    }, ignore_index=True)
-    df.to_csv(test_result_save_path, index=False)
-
-    if args.verbose:
-        print(f"Pretrain Test | {metrics}")
+        self.__append_to_csv(0, metrics, mode='test')
+        if self.verbose:
+            print(f"Pretrain Test | {metrics}")
 
 
 class TimeMAEClassificationForPretrainEval(nn.Module):

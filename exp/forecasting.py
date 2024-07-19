@@ -8,7 +8,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
-from models.TimeMAE import TimeMAEForecastingForFinetune
+from models.TimeMAE import TimeMAE, TimeMAEForecastingForFinetune
 
 
 @dataclass
@@ -31,6 +31,7 @@ class ForecastingFinetune:
             model: TimeMAEForecastingForFinetune,
             train_loader: DataLoader,
             val_loader: DataLoader,
+            test_loader: DataLoader,
             save_dir: Path,
     ):
         self.args = args
@@ -38,7 +39,9 @@ class ForecastingFinetune:
         self.model = model.to(args.device)
         self.train_loader = tqdm(train_loader, desc="Finetune Training") if self.verbose else train_loader
         self.val_loader = tqdm(val_loader, desc="Finetune Validation") if self.verbose else val_loader
+        self.test_loader = tqdm(test_loader, desc="Finetune Testing") if self.verbose else test_loader
         self.finetune_mode = args.finetune_mode
+        self.save_dir = save_dir
 
         # Training Metrics
         self.num_epochs_finetune = args.num_epochs_finetune
@@ -57,21 +60,24 @@ class ForecastingFinetune:
         # Evaluation Metrics
         self.mae_criterion = nn.L1Loss()
         # Save Path
-        self.train_result_save_path = save_dir / "finetune_train.csv"
-        self.val_result_save_path = save_dir / "finetune_val.csv"
-        self.model_save_path = save_dir / "finetune_model.pth"
+        self.train_result_save_path = self.save_dir / "finetune_train.csv"
+        self.val_result_save_path = self.save_dir / "finetune_val.csv"
+        self.test_result_save_path = self.save_dir / "finetune_test.csv"
+        self.model_save_path = self.save_dir / "finetune_model.pth"
         self.train_df = pd.DataFrame(columns=[
             'Epoch',
             'Loss MSE (Train)',
             'MAE'
         ])
-        self.train_df.to_csv(self.train_result_save_path, index=False)
         self.val_df = pd.DataFrame(columns=[
             'Epoch',
             'Loss MSE (Val)',
             'MAE'
         ])
-        self.val_df.to_csv(self.val_result_save_path, index=False)
+        self.test_df = pd.DataFrame(columns=[
+            'Loss MSE (Test)',
+            'MAE'
+        ])
 
     def __append_to_csv(self, epoch: int, metrics: Metrics, mode: str = 'train'):
         if mode == 'train':
@@ -88,10 +94,19 @@ class ForecastingFinetune:
                 'MAE': metrics.loss_mae,
             }, ignore_index=True)
             self.val_df.to_csv(self.val_result_save_path, index=False)
+        elif mode == 'test':
+            self.test_df = self.test_df.append({
+                'Loss MSE (Test)': metrics.loss_mse,
+                'MAE': metrics.loss_mae,
+            }, ignore_index=True)
+            self.test_df.to_csv(self.test_result_save_path, index=False)
         else:
             raise ValueError(f"Invalid mode: {mode}, mode should be 'train' or 'val'.")
 
     def finetune(self):
+        self.train_df.to_csv(self.train_result_save_path, index=False)
+        self.val_df.to_csv(self.val_result_save_path, index=False)
+
         best_val_loss_mse = float('inf')  # Use forecasting MSE as the metric to select the best model
         for epoch in range(self.num_epochs_finetune):
             train_metrics = self.__train_one_epoch()
@@ -147,44 +162,37 @@ class ForecastingFinetune:
 
         return metrics
 
+    @torch.no_grad()
+    def finetune_test(self):
+        self.test_df.to_csv(self.test_result_save_path, index=False)
+        # load the best model
+        model = TimeMAEForecastingForFinetune(
+            args=self.args,
+            TimeMAE_encoder=TimeMAE(
+                args=self.args,
+                origin_seq_len=self.args.seq_len,
+                num_features=self.args.num_features,
+            ),
+            origin_seq_len=self.args.seq_len,
+            num_features=self.args.num_features,
+        ).to(self.args.device)
+        if self.model_save_path.exists():
+            model.load_state_dict(torch.load(self.model_save_path))
+        else:
+            raise FileNotFoundError(f"Model not found at {self.model_save_path}")
 
-@torch.no_grad()
-def forecasting_finetune_test(
-        args: Namespace,
-        model: TimeMAEForecastingForFinetune,
-        test_loader: DataLoader,
-        save_dir: Path
-):
-    model.to(args.device)
-    model.eval()
-    mse_criterion = nn.MSELoss()
-    mae_criterion = nn.L1Loss()
+        model.eval()
+        metrics = Metrics()
+        for (data, labels) in self.test_loader:
+            outputs = model(data, finetune_mode=self.finetune_mode)
+            loss_mse = self.mse_criterion(outputs, labels)
+            loss_mae = self.mae_criterion(outputs, labels)
+            metrics.loss_mse += loss_mse.item()
+            metrics.loss_mae += loss_mae.item()
 
-    test_loader = tqdm(test_loader, desc="Finetune Testing") if args.verbose else test_loader
+        metrics.loss_mse /= len(self.test_loader)
+        metrics.loss_mae /= len(self.test_loader)
 
-    metrics = Metrics()
-    test_result_save_path = save_dir / "finetune_test.csv"
-    df = pd.DataFrame(columns=[
-        'Loss MSE (Test)',
-        'MAE'
-    ])
-    df.to_csv(test_result_save_path, index=False)
-
-    for (data, labels) in test_loader:
-        outputs = model(data, finetune_mode=args.finetune_mode)
-        loss_mse = mse_criterion(outputs, labels)
-        loss_mae = mae_criterion(outputs, labels)
-        metrics.loss_mse += loss_mse.item()
-        metrics.loss_mae += loss_mae.item()
-
-    metrics.loss_mse /= len(test_loader)
-    metrics.loss_mae /= len(test_loader)
-
-    df.append({
-        'Loss MSE (Test)': metrics.loss_mse,
-        'MAE': metrics.loss_mae
-    }, ignore_index=True)
-    df.to_csv(test_result_save_path, index=False)
-
-    if args.verbose:
-        print(f"Forecasting Finetune Test | {metrics}")
+        self.__append_to_csv(0, metrics, mode='test')
+        if self.verbose:
+            print(f"Forecasting Finetune Test | {metrics}")
