@@ -34,9 +34,10 @@ class ForecastingFinetune:
             save_dir: Path,
     ):
         self.args = args
+        self.verbose = args.verbose
         self.model = model.to(args.device)
-        self.train_loader = tqdm(train_loader, desc="Finetune Training") if args.verbose else train_loader
-        self.val_loader = tqdm(val_loader, desc="Finetune Validation") if args.verbose else val_loader
+        self.train_loader = tqdm(train_loader, desc="Finetune Training") if self.verbose else train_loader
+        self.val_loader = tqdm(val_loader, desc="Finetune Validation") if self.verbose else val_loader
         self.finetune_mode = args.finetune_mode
 
         # Training Metrics
@@ -50,8 +51,7 @@ class ForecastingFinetune:
         )
         self.scheduler = LambdaLR(
             self.optimizer,
-            lr_lambda=lambda step: args.lr_decay ** step,
-            verbose=args.verbose
+            lr_lambda=lambda step: args.lr_decay ** step
         )
 
         # Evaluation Metrics
@@ -96,12 +96,12 @@ class ForecastingFinetune:
         for epoch in range(self.num_epochs_finetune):
             train_metrics = self.__train_one_epoch()
             self.__append_to_csv(epoch, train_metrics, mode='train')
-            if self.args.verbose:
+            if self.verbose:
                 print(f"Forecasting Finetune Training Epoch {epoch + 1} | {train_metrics}")
             if (epoch + 1) % self.eval_per_epochs_finetune == 0:
                 val_metrics = self.__val_one_epoch()
                 self.__append_to_csv(epoch, val_metrics, mode='val')
-                if self.args.verbose:
+                if self.verbose:
                     print(f"Forecasting Finetune Validation Epoch {epoch + 1} | {val_metrics}")
                 if val_metrics.loss_mse < best_val_loss_mse:
                     best_val_loss_mse = val_metrics.loss_mse

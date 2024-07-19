@@ -55,9 +55,10 @@ class Pretrain:
             save_dir: Directory to save the results
         """
         self.args = args
+        self.verbose = args.verbose
         self.model = model.to(args.device)
-        self.train_loader = tqdm(train_loader, desc="Training") if args.verbose else train_loader
-        self.val_loader = tqdm(val_loader, desc="Validation") if args.verbose else val_loader
+        self.train_loader = tqdm(train_loader, desc="Training") if self.verbose else train_loader
+        self.val_loader = tqdm(val_loader, desc="Validation") if self.verbose else val_loader
         self.task = task
 
         # Loss Function
@@ -76,8 +77,7 @@ class Pretrain:
         )
         self.scheduler = LambdaLR(
             self.optimizer,
-            lr_lambda=lambda step: args.lr_decay ** step,
-            verbose=args.verbose
+            lr_lambda=lambda step: args.lr_decay ** step
         )
 
         # Save result
@@ -136,12 +136,12 @@ class Pretrain:
         for epoch in range(self.num_epochs_pretrain):
             train_metrics = self.__train_one_epoch()
             self.__append_to_csv(epoch + 1, train_metrics, mode='train')  # Save result to csv file
-            if self.args.verbose:
+            if self.verbose:
                 print(f"Pretrain Training Epoch {epoch + 1} | {train_metrics}")
             if (epoch + 1) % self.eval_per_epochs_pretrain == 0:
                 val_metrics = self.__val_one_epoch()
                 self.__append_to_csv(epoch + 1, val_metrics, mode='val')
-                if self.args.verbose:
+                if self.verbose:
                     print(f"Pretrain Validating Epoch {epoch + 1} | {val_metrics}")
                 if val_metrics.loss_sum < best_val_loss:
                     best_val_loss = val_metrics.loss_sum
