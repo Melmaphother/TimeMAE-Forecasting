@@ -1,4 +1,0 @@
-/data/*[!.py]
-exp
-__pycache__
-.idea
