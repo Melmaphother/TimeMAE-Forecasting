@@ -14,7 +14,7 @@ from torcheval.metrics import (
     MulticlassRecall,
     MulticlassF1Score,
 )
-from models.TimeMAE import TimeMAEClassifyForFinetune
+from models.TimeMAE import TimeMAEClassificationForFinetune
 
 
 @dataclass
@@ -28,23 +28,24 @@ class Metrics:
 
     def __repr__(self):
         _repr = (
-            f"Loss: {self.loss:.4f}\n"
-            f"Accuracy: {self.accuracy:.4f}\n"
-            f"Precision: {self.precision:.4f}\n"
-            f"Recall: {self.recall:.4f}\n"
-            f"Micro F1 Score: {self.micro_f1_score:.4f}\n"
+            f"Loss: {self.loss:.4f} | "
+            f"Accuracy: {self.accuracy:.4f} | "
+            f"Precision: {self.precision:.4f} | "
+            f"Recall: {self.recall:.4f} | "
+            f"Micro F1 Score: {self.micro_f1_score:.4f} | "
             f"Macro F1 Score: {self.macro_f1_score:.4f}"
         )
         return _repr
 
 
-class TimeMAEClassificationFinetune:
+class ClassificationFinetune:
     def __init__(
             self,
             args: Namespace,
-            model: TimeMAEClassifyForFinetune,
+            model: TimeMAEClassificationForFinetune,
             train_loader: DataLoader,
             val_loader: DataLoader,
+            save_dir: Path,
     ):
         self.args = args
         self.model = model.to(args.device)
@@ -75,12 +76,12 @@ class TimeMAEClassificationFinetune:
         self.macro_f1_score = MulticlassF1Score(average="macro", device=args.device)
 
         # Save Path
-        self.train_result_save_path = Path(args.save_dir) / "finetune_train.csv"
-        self.val_result_save_path = Path(args.save_dir) / "finetune_val.csv"
-        self.model_save_path = Path(args.save_dir) / "finetune_model.pth"
+        self.train_result_save_path = save_dir / "finetune_train.csv"
+        self.val_result_save_path = save_dir / "finetune_val.csv"
+        self.model_save_path = save_dir / "finetune_model.pth"
         self.train_df = pd.DataFrame(columns=[
             'Epoch',
-            'Train Loss',
+            'Loss (Train)',
             'Accuracy',
             'Precision',
             'Recall',
@@ -90,7 +91,7 @@ class TimeMAEClassificationFinetune:
         self.train_df.to_csv(self.train_result_save_path, index=False)
         self.val_df = pd.DataFrame(columns=[
             'Epoch',
-            'Val Loss',
+            'Loss (Val)',
             'Accuracy',
             'Precision',
             'Recall',
@@ -103,7 +104,7 @@ class TimeMAEClassificationFinetune:
         if mode == 'train':
             self.train_df = self.train_df.append({
                 'Epoch': epoch,
-                'Train Loss': metrics.loss,
+                'Loss (Train)': metrics.loss,
                 'Accuracy': metrics.accuracy,
                 'Precision': metrics.precision,
                 'Recall': metrics.recall,
@@ -114,7 +115,7 @@ class TimeMAEClassificationFinetune:
         elif mode == 'val':
             self.val_df = self.val_df.append({
                 'Epoch': epoch,
-                'Val Loss': metrics.loss,
+                'Loss (Val)': metrics.loss,
                 'Accuracy': metrics.accuracy,
                 'Precision': metrics.precision,
                 'Recall': metrics.recall,
@@ -126,19 +127,19 @@ class TimeMAEClassificationFinetune:
             raise ValueError(f"Invalid mode: {mode}, mode should be 'train' or 'val'.")
 
     def finetune(self):
-        best_val_loss = float("inf")
+        best_val_accuracy = 0.0  # Use classification accuracy as the metric to select the best model
         for epoch in range(self.num_epochs_finetune):
             train_metrics = self.__train_one_epoch()
             self.__append_to_csv(epoch, train_metrics, mode='train')
             if self.args.verbose:
-                print(f"Training Epoch {epoch + 1} | {train_metrics}")
+                print(f"Classification Finetune Training Epoch {epoch + 1} | {train_metrics}")
             if (epoch + 1) % self.eval_per_epochs_finetune == 0:
                 val_metrics = self.__val_one_epoch()
                 self.__append_to_csv(epoch, val_metrics, mode='val')
                 if self.args.verbose:
-                    print(f"Validating Epoch {epoch + 1} | {val_metrics}")
-                if val_metrics.loss < best_val_loss:
-                    best_val_loss = val_metrics.loss
+                    print(f"Classification Finetune Validating Epoch {epoch + 1} | {val_metrics}")
+                if val_metrics.accuracy > best_val_accuracy:
+                    best_val_accuracy = val_metrics.accuracy
                     torch.save(self.model.state_dict(), self.model_save_path)
 
     def __train_one_epoch(self) -> Metrics:
@@ -150,7 +151,6 @@ class TimeMAEClassificationFinetune:
         self.micro_f1_score.reset()
         self.macro_f1_score.reset()
 
-        loss_sum = 0.0
         for (data, labels) in self.train_loader:
             self.optimizer.zero_grad()
 
@@ -162,12 +162,12 @@ class TimeMAEClassificationFinetune:
             self.micro_f1_score.update(predicted, labels)
             self.macro_f1_score.update(predicted, labels)
             loss = self.criterion(outputs, labels)
-            loss_sum += loss.item()
+            metrics.loss += loss.item()
 
             loss.backward()
             self.optimizer.step()
 
-        metrics.loss = loss_sum / len(self.train_loader)
+        metrics.loss /= len(self.train_loader)
         metrics.accuracy = self.accuracy.compute().item()
         metrics.precision = self.precision.compute().item()
         metrics.recall = self.recall.compute().item()
@@ -188,7 +188,6 @@ class TimeMAEClassificationFinetune:
         self.micro_f1_score.reset()
         self.macro_f1_score.reset()
 
-        loss_sum = 0.0
         for (data, labels) in self.val_loader:
             outputs = self.model(data, finetune_mode=self.finetune_mode)
             _, predicted = torch.max(outputs, -1)
@@ -198,9 +197,9 @@ class TimeMAEClassificationFinetune:
             self.micro_f1_score.update(predicted, labels)
             self.macro_f1_score.update(predicted, labels)
             loss = self.criterion(outputs, labels)
-            loss_sum += loss.item()
+            metrics.loss += loss.item()
 
-        metrics.loss = loss_sum / len(self.val_loader)
+        metrics.loss /= len(self.val_loader)
         metrics.accuracy = self.accuracy.compute().item()
         metrics.precision = self.precision.compute().item()
         metrics.recall = self.recall.compute().item()
@@ -212,18 +211,20 @@ class TimeMAEClassificationFinetune:
 @torch.no_grad()
 def classification_finetune_test(
         args: Namespace,
-        model: nn.Module,
+        model: TimeMAEClassificationForFinetune,
         test_loader: DataLoader,
+        save_dir: Path,
 ):
+    model.to(args.device)
     model.eval()
     criterion = nn.CrossEntropyLoss()
 
     test_loader = tqdm(test_loader, desc="Finetune Testing") if args.verbose else test_loader
 
     metrics = Metrics()
-    test_result_save_path = Path(args.save_dir) / "finetune_test.csv"
+    test_result_save_path = save_dir / "finetune_test.csv"
     df = pd.DataFrame(columns=[
-        'Test Loss',
+        'Loss (Test)',
         'Accuracy',
         'Precision',
         'Recall',
@@ -248,8 +249,9 @@ def classification_finetune_test(
         micro_f1_score.update(predicted, labels)
         macro_f1_score.update(predicted, labels)
 
-        metrics.loss = loss.item()
+        metrics.loss += loss.item()
 
+    metrics.loss /= len(test_loader)
     metrics.accuracy = accuracy.compute().item()
     metrics.precision = precision.compute().item()
     metrics.recall = recall.compute().item()
@@ -257,7 +259,7 @@ def classification_finetune_test(
     metrics.macro_f1_score = macro_f1_score.compute().item()
 
     df.append({
-        'Test Loss': metrics.loss,
+        'Loss (Test)': metrics.loss,
         'Accuracy': metrics.accuracy,
         'Precision': metrics.precision,
         'Recall': metrics.recall,

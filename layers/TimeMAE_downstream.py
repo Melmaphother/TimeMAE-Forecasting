@@ -19,7 +19,8 @@ class ClassificationHead(nn.Module):
             output tensor, shape (batch_size, num_classes)
         """
         x = x.mean(dim=1)
-        return self.classify_head(x)
+        x = self.classify_head(x)  # (batch_size, num_classes)
+        return x
 
 
 class ForecastingHead(nn.Module):
@@ -41,9 +42,9 @@ class ForecastingHead(nn.Module):
         Args:
             x: input tensor, shape (batch_size, seq_len, d_model)
         Returns:
-            output tensor, shape (batch_size, pred_len. channels)
+            output tensor, shape (batch_size, pred_len, num_features)
         """
         x = self.flatten(x)  # (batch_size, seq_len * d_model)
-        x = self.forecast_head(x)  # (batch_size, pred_len * channels)
-        x = x.view(-1, self.pred_len, self.num_features)  # (batch_size, pred_len, channels)
+        x = self.forecast_head(x)  # (batch_size, pred_len * num_features)
+        x = x.view(-1, self.pred_len, self.num_features)  # (batch_size, pred_len, num_features)
         return x

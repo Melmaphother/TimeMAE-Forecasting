@@ -160,13 +160,13 @@ class TimeMAE(nn.Module):
             raise ValueError("mode should be one of ['linear_probability', 'classification', 'forecasting']")
 
 
-class TimeMAEClassifyForFinetune(nn.Module):
+class TimeMAEClassificationForFinetune(nn.Module):
     def __init__(
             self,
             args: Namespace,
             TimeMAE_encoder: TimeMAE,
     ):
-        super(TimeMAEClassifyForFinetune, self).__init__()
+        super(TimeMAEClassificationForFinetune, self).__init__()
 
         self.TimeMAE_encoder = TimeMAE_encoder
 
@@ -178,7 +178,7 @@ class TimeMAEClassifyForFinetune(nn.Module):
     def forward(self, x, finetune_mode: str = 'fine_all'):
         if finetune_mode == 'fine_all':
             x = self.TimeMAE_encoder(x, mode='classification')
-            x = self.classify_head(x)
+            x = self.classify_head(x)  # (batch_size, num_classes)
         elif finetune_mode == 'fine_last':
             with torch.no_grad():
                 x = self.TimeMAE_encoder(x, mode='classification')
@@ -188,7 +188,7 @@ class TimeMAEClassifyForFinetune(nn.Module):
         return x
 
 
-class TimeMAEForecastForFinetune(nn.Module):
+class TimeMAEForecastingForFinetune(nn.Module):
     def __init__(
             self,
             args: Namespace,
@@ -196,7 +196,7 @@ class TimeMAEForecastForFinetune(nn.Module):
             origin_seq_len: int,
             num_features: int,
     ):
-        super(TimeMAEForecastForFinetune, self).__init__()
+        super(TimeMAEForecastingForFinetune, self).__init__()
 
         self.TimeMAE_encoder = TimeMAE_encoder
 
@@ -216,7 +216,7 @@ class TimeMAEForecastForFinetune(nn.Module):
         if finetune_mode == 'fine_all':
             x = self.revin_layer(x, 'norm')
             x = self.TimeMAE_encoder(x, mode='forecasting')
-            x = self.forecast_head(x)
+            x = self.forecast_head(x)  # (batch_size, pred_len, num_features)
             x = self.revin_layer(x, 'denorm')
         elif finetune_mode == 'fine_last':
             with torch.no_grad():

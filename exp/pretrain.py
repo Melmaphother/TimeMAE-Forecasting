@@ -35,15 +35,25 @@ class Metrics:
         return _repr
 
 
-class TimeMAEPretrain:
+class Pretrain:
     def __init__(
             self,
             args: Namespace,
             model: TimeMAE,
             train_loader: DataLoader,
             val_loader: DataLoader,
-            task: str = 'classification',
+            task: str,
+            save_dir: Path,
     ):
+        """
+        Args:
+            args: Global arguments
+            model: TimeMAE like model
+            train_loader: DataLoader for training
+            val_loader: DataLoader for validation
+            task: 'classification' or 'forecasting'
+            save_dir: Directory to save the results
+        """
         self.args = args
         self.model = model.to(args.device)
         self.train_loader = tqdm(train_loader, desc="Training") if args.verbose else train_loader
@@ -71,9 +81,9 @@ class TimeMAEPretrain:
         )
 
         # Save result
-        self.train_result_save_path = Path(args.save_dir) / 'pretrain_train.csv'
-        self.val_result_save_path = Path(args.save_dir) / 'pretrain_val.csv'
-        self.model_save_path = Path(args.save_dir) / 'pretrain_model.pth'
+        self.train_result_save_path = save_dir / 'pretrain_train.csv'
+        self.val_result_save_path = save_dir / 'pretrain_val.csv'
+        self.model_save_path = save_dir / 'pretrain_model.pth'
         self.train_df = pd.DataFrame(columns=[
             'Epoch',
             'Train Loss',  # Loss = alpha * Loss MCC (CE) + beta * Loss MRR (MSE)
@@ -127,12 +137,12 @@ class TimeMAEPretrain:
             train_metrics = self.__train_one_epoch()
             self.__append_to_csv(epoch + 1, train_metrics, mode='train')  # Save result to csv file
             if self.args.verbose:
-                print(f"Training Epoch {epoch + 1} | {train_metrics}")
+                print(f"Pretrain Training Epoch {epoch + 1} | {train_metrics}")
             if (epoch + 1) % self.eval_per_epochs_pretrain == 0:
                 val_metrics = self.__val_one_epoch()
                 self.__append_to_csv(epoch + 1, val_metrics, mode='val')
                 if self.args.verbose:
-                    print(f"Validating Epoch {epoch + 1} | {val_metrics}")
+                    print(f"Pretrain Validating Epoch {epoch + 1} | {val_metrics}")
                 if val_metrics.loss_sum < best_val_loss:
                     best_val_loss = val_metrics.loss_sum
                     torch.save(self.model.state_dict(), self.model_save_path)
@@ -204,6 +214,7 @@ def pretrain_test(
         args: Namespace,
         model: nn.Module,
         test_loader: DataLoader,
+        save_dir: Path
 ):
     model.eval()
     mcc_criterion = nn.CrossEntropyLoss()
@@ -214,7 +225,7 @@ def pretrain_test(
     test_loader = tqdm(test_loader, desc="Testing") if args.verbose else test_loader
 
     metrics = Metrics()
-    test_result_save_path = Path(args.save_dir) / 'pretrain_test.csv'
+    test_result_save_path = save_dir / 'pretrain_test.csv'
     df = pd.DataFrame(columns=[
         'Test Loss',  # Loss Sum = alpha * Loss MCC (CE) + beta * Loss MRR (MSE)
         'Loss MCC (CE)',

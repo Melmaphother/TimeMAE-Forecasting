@@ -21,7 +21,7 @@ class FeatureExtractor(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            x: input tensor, shape (batch_size, seq_len，n_features)
+            x: input tensor, shape (batch_size, seq_len，num_features)
         Returns:
             output tensor, shape (batch_size, seq_len, d_model)
         """
@@ -209,7 +209,7 @@ class TransformerEncoder(nn.Module):
     ):
         super(TransformerEncoder, self).__init__()
         self.encoder = nn.ModuleList([
-         TransformerEncoderLayer(
+            TransformerEncoderLayer(
                 d_model=d_model,
                 nhead=nhead,
                 dim_feedforward=dim_feedforward,
@@ -244,7 +244,7 @@ class TransformerDecoupledEncoder(nn.Module):
     ):
         super(TransformerDecoupledEncoder, self).__init__()
         self.decoupled_encoder = nn.ModuleList([
-         TransformerDecoupledEncoderLayer(
+            TransformerDecoupledEncoderLayer(
                 d_model=d_model,
                 nhead=nhead,
                 dim_feedforward=dim_feedforward,
