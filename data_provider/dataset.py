@@ -146,10 +146,10 @@ class HARDataset(Dataset):
         test_data = torch.load(test_file_path)
 
         if self.scale:
-            self.scaler.fit(train_data)
-            train_data = self.scaler(train_data)
-            val_data = self.scaler(val_data)
-            test_data = self.scaler(test_data)
+            self.scaler.fit(train_data['samples'])
+            train_data['samples'] = self.scaler(train_data['samples'])
+            val_data['samples'] = self.scaler(val_data['samples'])
+            test_data['samples'] = self.scaler(test_data['samples'])
 
         match self.flag:
             case 'train':
