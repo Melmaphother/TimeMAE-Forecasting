@@ -7,10 +7,12 @@ from pathlib import Path
 from dataclasses import dataclass
 from tqdm import tqdm
 from torch.optim import AdamW, Adam
-from torch.optim.lr_scheduler import LambdaLR
+from torch.optim.lr_scheduler import ExponentialLR
 from models.TimeMAE import TimeMAE
-from layers.TimeMAE_downstream import ClassificationHead
-from torcheval.metrics import MulticlassAccuracy
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.multiclass import OneVsRestClassifier
 
 
 @dataclass
@@ -30,7 +32,7 @@ class Metrics:
             f"Hits: {self.hits:.4f} | "
             f"NDCG@10: {self.ndcg:.4f}"
         )
-        if self.accuracy != -1:  # When Validation
+        if self.accuracy != -1.0:  # When Validation
             _repr += f" | Accuracy: {self.accuracy:.4f}"
         return _repr
 
@@ -58,13 +60,13 @@ class Pretrain:
         self.args = args
         self.verbose = args.verbose
         self.model = model.to(args.device)
-        self.train_loader = tqdm(train_loader, desc="Training") if self.verbose else train_loader
-        self.val_loader = tqdm(val_loader, desc="Validation") if self.verbose else val_loader
-        self.test_loader = tqdm(test_loader, desc="Testing") if self.verbose else test_loader
+        self.train_loader = train_loader
+        self.val_loader = val_loader
+        self.test_loader = test_loader
         self.task = task
 
         # Loss Function
-        self.mcc_criterion = nn.CrossEntropyLoss()  # MCC means masked codeword classification
+        self.mcc_criterion = nn.CrossEntropyLoss(label_smoothing=0.2)  # MCC means masked codeword classification
         self.mrr_criterion = nn.MSELoss()  # MRR means masked representation regression
         self.alpha = args.alpha
         self.beta = args.beta
@@ -74,12 +76,12 @@ class Pretrain:
         self.eval_per_epochs_pretrain = args.eval_per_epochs_pretrain
         self.optimizer = AdamW(
             self.model.parameters(),
-            lr=args.lr,
+            lr=args.pretrain_lr,
             weight_decay=args.weight_decay
         )
-        self.scheduler = LambdaLR(
-            self.optimizer,
-            lr_lambda=lambda step: args.lr_decay ** step
+        self.scheduler = ExponentialLR(
+            optimizer=self.optimizer,
+            gamma=args.lr_decay
         )
 
         # Save result
@@ -109,22 +111,24 @@ class Pretrain:
             'Loss MCC (CE)',
             'Loss MRR (MSE)',
             'Hits',
-            'NDCG@10'
+            'NDCG@10',
+            'Accuracy'
         ])
 
     def __append_to_csv(self, epoch: int, metrics: Metrics, mode: str = 'train'):
         if mode == 'train':
-            self.train_df = self.train_df.append({
+            new_row = pd.DataFrame([{
                 'Epoch': epoch,
                 'Train Loss': metrics.loss_sum,
                 'Loss MCC (CE)': metrics.loss_mcc,
                 'Loss MRR (MSE)': metrics.loss_mrr,
                 'Hits': metrics.hits,
                 'NDCG@10': metrics.ndcg
-            }, ignore_index=True)
+            }])
+            self.train_df = pd.concat([self.train_df, new_row], ignore_index=True)
             self.train_df.to_csv(self.train_result_save_path, index=False)
         elif mode == 'val':
-            self.val_df = self.val_df.append({
+            new_row = pd.DataFrame([{
                 'Epoch': epoch,
                 'Val Loss': metrics.loss_sum,
                 'Loss MCC (CE)': metrics.loss_mcc,
@@ -132,16 +136,19 @@ class Pretrain:
                 'Hits': metrics.hits,
                 'NDCG@10': metrics.ndcg,
                 'Accuracy': metrics.accuracy
-            }, ignore_index=True)
+            }])
+            self.val_df = pd.concat([self.val_df, new_row], ignore_index=True)
             self.val_df.to_csv(self.val_result_save_path, index=False)
         elif mode == 'test':
-            self.test_df = self.test_df.append({
+            new_row = pd.DataFrame([{
                 'Test Loss': metrics.loss_sum,
                 'Loss MCC (CE)': metrics.loss_mcc,
                 'Loss MRR (MSE)': metrics.loss_mrr,
                 'Hits': metrics.hits,
-                'NDCG@10': metrics.ndcg
-            }, ignore_index=True)
+                'NDCG@10': metrics.ndcg,
+                'Accuracy': metrics.accuracy
+            }])
+            self.test_df = pd.concat([self.test_df, new_row], ignore_index=True)
             self.test_df.to_csv(self.test_result_save_path, index=False)
         else:
             raise ValueError(f"Invalid mode: {mode}, mode should be 'train', 'val' or 'test'.")
@@ -169,11 +176,15 @@ class Pretrain:
     def __train_one_epoch(self) -> Metrics:
         self.model.train()
         metrics = Metrics()
-        for (data, _) in self.train_loader:
+        train_loader = tqdm(self.train_loader, desc='Training') if self.verbose else self.train_loader
+        for (data, _) in train_loader:
             self.optimizer.zero_grad()
-
             ([rep_mask, rep_mask_prediction],
              [mask_words, mask_words_prediction]) = self.model.pretrain_forward(data)
+            
+            # (batch_size, seq_len, vocab_size) -> (batch_size * seq_len, vocab_size)
+            mask_words_prediction = mask_words_prediction.view(-1, mask_words_prediction.size(-1))
+            mask_words = mask_words.view(-1)  # (batch_size, seq_len) -> (batch_size * seq_len)
 
             loss_mcc = self.mcc_criterion(mask_words_prediction, mask_words)
             loss_mrr = self.mrr_criterion(rep_mask, rep_mask_prediction)
@@ -181,6 +192,9 @@ class Pretrain:
             metrics.loss_mcc += loss_mcc.item()
             metrics.loss_mrr += loss_mrr.item()
             metrics.loss_sum += loss_sum.item()
+            hits, ndcg = get_hits_and_ndcg(mask_words_prediction, mask_words)
+            metrics.hits += hits
+            metrics.ndcg += ndcg
 
             loss_sum.backward()
             self.optimizer.step()
@@ -190,6 +204,7 @@ class Pretrain:
         metrics.loss_mcc /= len(self.train_loader)
         metrics.loss_mrr /= len(self.train_loader)
         metrics.loss_sum /= len(self.train_loader)
+        metrics.ndcg /= len(self.train_loader)
 
         self.scheduler.step()
 
@@ -199,10 +214,14 @@ class Pretrain:
     def __val_one_epoch(self) -> Metrics:
         self.model.eval()
         metrics = Metrics()
-        for (val_data, labels) in self.val_loader:
+        val_loader = tqdm(self.val_loader, desc='Validating') if self.verbose else self.val_loader
+        for (val_data, _) in val_loader:
             # Pretrain Validation
             ([rep_mask, rep_mask_prediction],
              [mask_words, mask_words_prediction]) = self.model.pretrain_forward(val_data)
+
+            mask_words_prediction = mask_words_prediction.view(-1, mask_words_prediction.size(-1))
+            mask_words = mask_words.view(-1)
 
             loss_mcc = self.mcc_criterion(mask_words_prediction, mask_words)
             loss_mrr = self.mrr_criterion(rep_mask, rep_mask_prediction)
@@ -210,6 +229,9 @@ class Pretrain:
             metrics.loss_mcc += loss_mcc.item()
             metrics.loss_mrr += loss_mrr.item()
             metrics.loss_sum += loss_sum.item()
+            hits, ndcg = get_hits_and_ndcg(mask_words_prediction, mask_words)
+            metrics.hits += hits
+            metrics.ndcg += ndcg
 
             # Classification Supervised Validation when pretraining
             if self.task == 'classification':
@@ -224,6 +246,7 @@ class Pretrain:
         metrics.loss_mcc /= len(self.val_loader)
         metrics.loss_mrr /= len(self.val_loader)
         metrics.loss_sum /= len(self.val_loader)
+        metrics.ndcg /= len(self.train_loader)
 
         return metrics
 
@@ -244,9 +267,13 @@ class Pretrain:
 
         model.eval()
         metrics = Metrics()
-        for (data, _) in self.test_loader:
+        test_loader = tqdm(self.test_loader, desc='Testing') if self.verbose else self.test_loader
+        for (data, _) in test_loader:
             ([rep_mask, rep_mask_prediction],
              [mask_words, mask_words_prediction]) = model.pretrain_forward(data)
+            
+            mask_words_prediction = mask_words_prediction.view(-1, mask_words_prediction.size(-1))
+            mask_words = mask_words.view(-1)
 
             loss_mcc = self.mcc_criterion(mask_words_prediction, mask_words)
             loss_mrr = self.mrr_criterion(rep_mask, rep_mask_prediction)
@@ -254,6 +281,9 @@ class Pretrain:
             metrics.loss_mcc += loss_mcc.item()
             metrics.loss_mrr += loss_mrr.item()
             metrics.loss_sum += loss_sum.item()
+            hits, ndcg = get_hits_and_ndcg(mask_words_prediction, mask_words)
+            metrics.hits += hits
+            metrics.ndcg += ndcg
 
             if self.task == 'classification':
                 pretrain_eval = TimeMAEClassificationForPretrainEval(
@@ -267,52 +297,77 @@ class Pretrain:
         metrics.loss_mcc /= len(self.test_loader)
         metrics.loss_mrr /= len(self.test_loader)
         metrics.loss_sum /= len(self.test_loader)
+        metrics.ndcg /= len(self.train_loader)
 
         self.__append_to_csv(0, metrics, mode='test')
         if self.verbose:
             print(f"Pretrain Test | {metrics}")
 
 
-class TimeMAEClassificationForPretrainEval(nn.Module):
+class TimeMAEClassificationForPretrainEval:
     def __init__(
             self,
             args: Namespace,
             TimeMAE_encoder: TimeMAE,
     ):
-        super(TimeMAEClassificationForPretrainEval, self).__init__()
-        self.args = args
         self.TimeMAE_encoder = TimeMAE_encoder
-        self.classify_head = ClassificationHead(
-            d_model=args.d_model,
-            num_classes=args.num_classes
-        ).to(args.device)
-        self.criterion = nn.CrossEntropyLoss()
-        self.optimizer = Adam(
-            self.TimeMAE_encoder.parameters(),
-            lr=args.lr
+        self.pipeline = make_pipeline(
+            StandardScaler(),
+            OneVsRestClassifier(
+                LogisticRegression(
+                    random_state=args.seed,
+                    max_iter=1000000
+                )
+            )
         )
-
-        self.accuracy = MulticlassAccuracy(device=args.device)
+    
+    def __get_reps_and_labels(self, loader):
+        reps = []
+        labels = []
+        with torch.no_grad():
+            for (data, label) in loader:
+                x = self.TimeMAE_encoder(data, task='linear_probability')
+                reps.extend(x.cpu().numpy().tolist())  # why extend? since we should flatten the reps to 1 dimension
+                labels.extend(label.cpu().numpy().tolist())
+        return reps, labels
 
     def fit(self, train_loader):
-        self.model.train()
-        for (data, labels) in train_loader:
-            self.optimizer.zero_grad()
-            with torch.no_grad():
-                x = self.TimeMAE_encoder(data, task='classification')  # Don't update TimeMAE_encoder
-            outputs = self.classify_head(x)
-            loss = self.criterion(outputs, labels)
-            loss.backward()
-            self.optimizer.step()
+        train_reps, train_labels = self.__get_reps_and_labels(train_loader)
+        self.pipeline.fit(train_reps, train_labels)
 
-    @torch.no_grad()
     def score(self, val_loader):
-        self.model.eval()
-        self.accuracy.reset()
-        for (data, labels) in val_loader:
-            x = self.TimeMAE_encoder(data, task='classification')
-            outputs = self.classify_head(x)
-            _, predicted = torch.max(outputs, -1)
-            self.accuracy.update(predicted, labels)
+        val_reps, val_labels = self.__get_reps_and_labels(val_loader)
+        accuracy = self.pipeline.score(val_reps, val_labels)
+        return accuracy
 
-        return self.accuracy.compute()
+
+def get_hits_and_ndcg(pred, target):
+    """
+    Args:
+        pred: (batch_size * seq_len, vocab_size)
+        target: (batch_size * seq_len)
+    """
+    hits = torch.sum(torch.argmax(pred, dim=-1) == target).item()
+    ndcg = recalls_and_ndcgs_for_ks(pred, target.view(-1, 1), 10)
+    return hits, ndcg
+
+
+def recalls_and_ndcgs_for_ks(scores, answers, k):
+    answers = answers.tolist()
+    labels = torch.zeros_like(scores).to(scores.device)
+    for i in range(len(answers)):
+        labels[i][answers[i]] = 1
+    answer_count = labels.sum(1)
+
+    labels_float = labels.float()
+    rank = (-scores).argsort(dim=1)
+    cut = rank
+    cut = cut[:, :k]
+    hits = labels_float.gather(1, cut)
+    position = torch.arange(2, 2 + k)
+    weights = 1 / torch.log2(position.float())
+    dcg = (hits * weights.to(hits.device)).sum(1)
+    idcg = torch.Tensor([weights[:min(int(n), k)].sum() for n in answer_count]).to(dcg.device)
+    ndcg = (dcg / idcg).mean()
+    ndcg = ndcg.cpu().item()
+    return ndcg

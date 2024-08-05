@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from pathlib import Path
 from dataclasses import dataclass
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import LambdaLR
+from torch.optim.lr_scheduler import ExponentialLR
 from models.TimeMAE import TimeMAE, TimeMAEForecastingForFinetune
 
 
@@ -37,11 +37,17 @@ class ForecastingFinetune:
         self.args = args
         self.verbose = args.verbose
         self.model = model.to(args.device)
-        self.train_loader = tqdm(train_loader, desc="Finetune Training") if self.verbose else train_loader
-        self.val_loader = tqdm(val_loader, desc="Finetune Validation") if self.verbose else val_loader
-        self.test_loader = tqdm(test_loader, desc="Finetune Testing") if self.verbose else test_loader
+        self.train_loader = train_loader
+        self.val_loader = val_loader
+        self.test_loader = test_loader
         self.finetune_mode = args.finetune_mode
         self.save_dir = save_dir
+
+        # finetune mode
+        if args.finetune_mode == 'fine_all':
+            self.model.unfreeze_encoder()
+        elif args.finetune_mode == 'fine_last':
+            self.model.freeze_encoder()
 
         # Training Metrics
         self.num_epochs_finetune = args.num_epochs_finetune
@@ -49,12 +55,12 @@ class ForecastingFinetune:
         self.mse_criterion = nn.MSELoss()
         self.optimizer = AdamW(
             self.model.parameters(),
-            lr=args.lr,
+            lr=args.finetune_lr,
             weight_decay=args.weight_decay
         )
-        self.scheduler = LambdaLR(
-            self.optimizer,
-            lr_lambda=lambda step: args.lr_decay ** step
+        self.scheduler = ExponentialLR(
+            optimizer=self.optimizer,
+            gamma=args.lr_decay
         )
 
         # Evaluation Metrics
@@ -81,24 +87,27 @@ class ForecastingFinetune:
 
     def __append_to_csv(self, epoch: int, metrics: Metrics, mode: str = 'train'):
         if mode == 'train':
-            self.train_df = self.train_df.append({
+            new_row = pd.DataFrame([{
                 'Epoch': epoch,
                 'Loss MSE (Train)': metrics.loss_mse,
                 'MAE': metrics.loss_mae,
-            }, ignore_index=True)
+            }])
+            self.train_df = pd.concat([self.train_df, new_row], ignore_index=True)
             self.train_df.to_csv(self.train_result_save_path, index=False)
         elif mode == 'val':
-            self.val_df = self.val_df.append({
+            new_row = pd.DataFrame([{
                 'Epoch': epoch,
                 'Loss MSE (Val)': metrics.loss_mse,
                 'MAE': metrics.loss_mae,
-            }, ignore_index=True)
+            }])
+            self.val_df = pd.concat([self.val_df, new_row], ignore_index=True)
             self.val_df.to_csv(self.val_result_save_path, index=False)
         elif mode == 'test':
-            self.test_df = self.test_df.append({
+            new_row = pd.DataFrame([{
                 'Loss MSE (Test)': metrics.loss_mse,
                 'MAE': metrics.loss_mae,
-            }, ignore_index=True)
+            }])
+            self.test_df = pd.concat([self.test_df, new_row], ignore_index=True)
             self.test_df.to_csv(self.test_result_save_path, index=False)
         else:
             raise ValueError(f"Invalid mode: {mode}, mode should be 'train', 'val' or 'test'.")
@@ -110,12 +119,12 @@ class ForecastingFinetune:
         best_val_loss_mse = float('inf')  # Use forecasting MSE as the metric to select the best model
         for epoch in range(self.num_epochs_finetune):
             train_metrics = self.__train_one_epoch()
-            self.__append_to_csv(epoch, train_metrics, mode='train')
+            self.__append_to_csv(epoch + 1, train_metrics, mode='train')
             if self.verbose:
                 print(f"Forecasting Finetune Training Epoch {epoch + 1} | {train_metrics}")
             if (epoch + 1) % self.eval_per_epochs_finetune == 0:
                 val_metrics = self.__val_one_epoch()
-                self.__append_to_csv(epoch, val_metrics, mode='val')
+                self.__append_to_csv(epoch + 1, val_metrics, mode='val')
                 if self.verbose:
                     print(f"Forecasting Finetune Validation Epoch {epoch + 1} | {val_metrics}")
                 if val_metrics.loss_mse < best_val_loss_mse:
@@ -125,8 +134,8 @@ class ForecastingFinetune:
     def __train_one_epoch(self) -> Metrics:
         self.model.train()
         metrics = Metrics()
-
-        for (data, labels) in self.train_loader:
+        train_loader = tqdm(self.train_loader, desc="Finetune Training") if self.verbose else self.train_loader
+        for (data, labels) in train_loader:
             self.optimizer.zero_grad()
 
             outputs = self.model(data, finetune_mode=self.finetune_mode)
@@ -149,8 +158,8 @@ class ForecastingFinetune:
     def __val_one_epoch(self) -> Metrics:
         self.model.eval()
         metrics = Metrics()
-
-        for (data, labels) in self.val_loader:
+        val_loader = tqdm(self.val_loader, desc="Finetune Validation") if self.verbose else self.val_loader
+        for (data, labels) in val_loader:
             outputs = self.model(data, finetune_mode=self.finetune_mode)
             loss_mse = self.mse_criterion(outputs, labels)
             loss_mae = self.mae_criterion(outputs, labels)
@@ -183,7 +192,8 @@ class ForecastingFinetune:
 
         model.eval()
         metrics = Metrics()
-        for (data, labels) in self.test_loader:
+        test_loader = tqdm(self.test_loader, desc="Finetune Test") if self.verbose else self.test_loader
+        for (data, labels) in test_loader:
             outputs = model(data, finetune_mode=self.finetune_mode)
             loss_mse = self.mse_criterion(outputs, labels)
             loss_mae = self.mae_criterion(outputs, labels)

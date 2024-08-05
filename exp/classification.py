@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from pathlib import Path
 from dataclasses import dataclass
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import LambdaLR
+from torch.optim.lr_scheduler import ExponentialLR
 from torcheval.metrics import (
     MulticlassAccuracy,
     MulticlassPrecision,
@@ -51,9 +51,9 @@ class ClassificationFinetune:
         self.args = args
         self.verbose = args.verbose
         self.model = model.to(args.device)
-        self.train_loader = tqdm(train_loader, desc="Finetune Training") if self.verbose else train_loader
-        self.val_loader = tqdm(val_loader, desc="Finetune Validation") if self.verbose else val_loader
-        self.test_loader = tqdm(test_loader, desc="Finetune Testing") if self.verbose else test_loader
+        self.train_loader = train_loader
+        self.val_loader = val_loader
+        self.test_loader = test_loader
         self.finetune_mode = args.finetune_mode
         self.save_dir = save_dir
 
@@ -66,9 +66,9 @@ class ClassificationFinetune:
             lr=args.lr,
             weight_decay=args.weight_decay
         )
-        self.scheduler = LambdaLR(
-            self.optimizer,
-            lr_lambda=lambda step: args.lr_decay ** step
+        self.scheduler = ExponentialLR(
+            optimizer=self.optimizer,
+            gamma=args.lr_decay
         )
 
         # Evaluation Metrics
@@ -76,7 +76,7 @@ class ClassificationFinetune:
         self.precision = MulticlassPrecision(device=args.device)
         self.recall = MulticlassRecall(device=args.device)
         self.micro_f1_score = MulticlassF1Score(average="micro", device=args.device)
-        self.macro_f1_score = MulticlassF1Score(average="macro", device=args.device)
+        self.macro_f1_score = MulticlassF1Score(num_classes=args.num_classes, average="macro", device=args.device)
 
         # Save Path
         self.train_result_save_path = self.save_dir / "finetune_train.csv"
@@ -112,7 +112,7 @@ class ClassificationFinetune:
 
     def __append_to_csv(self, epoch: int, metrics: Metrics, mode: str = 'train'):
         if mode == 'train':
-            self.train_df = self.train_df.append({
+            new_row = pd.DataFrame([{
                 'Epoch': epoch,
                 'Loss (Train)': metrics.loss,
                 'Accuracy': metrics.accuracy,
@@ -120,10 +120,11 @@ class ClassificationFinetune:
                 'Recall': metrics.recall,
                 'Micro F1 Score': metrics.micro_f1_score,
                 'Macro F1 Score': metrics.macro_f1_score,
-            }, ignore_index=True)
+            }])
+            self.train_df = pd.concat([self.train_df, new_row], ignore_index=True)
             self.train_df.to_csv(self.train_result_save_path, index=False)
         elif mode == 'val':
-            self.val_df = self.val_df.append({
+            new_row = pd.DataFrame([{
                 'Epoch': epoch,
                 'Loss (Val)': metrics.loss,
                 'Accuracy': metrics.accuracy,
@@ -131,17 +132,19 @@ class ClassificationFinetune:
                 'Recall': metrics.recall,
                 'Micro F1 Score': metrics.micro_f1_score,
                 'Macro F1 Score': metrics.macro_f1_score,
-            }, ignore_index=True)
+            }])
+            self.val_df = pd.concat([self.val_df, new_row], ignore_index=True)
             self.val_df.to_csv(self.val_result_save_path, index=False)
         elif mode == 'test':
-            self.test_df = self.test_df.append({
+            new_row = pd.DataFrame([{
                 'Loss (Test)': metrics.loss,
                 'Accuracy': metrics.accuracy,
                 'Precision': metrics.precision,
                 'Recall': metrics.recall,
                 'Micro F1 Score': metrics.micro_f1_score,
                 'Macro F1 Score': metrics.macro_f1_score,
-            }, ignore_index=True)
+            }])
+            self.test_df = pd.concat([self.test_df, new_row], ignore_index=True)
             self.test_df.to_csv(self.test_result_save_path, index=False)
         else:
             raise ValueError(f"Invalid mode: {mode}, mode should be 'train', 'val' or 'test'.")
@@ -153,12 +156,12 @@ class ClassificationFinetune:
         best_val_accuracy = 0.0  # Use classification accuracy as the metric to select the best model
         for epoch in range(self.num_epochs_finetune):
             train_metrics = self.__train_one_epoch()
-            self.__append_to_csv(epoch, train_metrics, mode='train')
+            self.__append_to_csv(epoch + 1, train_metrics, mode='train')
             if self.verbose:
                 print(f"Classification Finetune Training Epoch {epoch + 1} | {train_metrics}")
             if (epoch + 1) % self.eval_per_epochs_finetune == 0:
                 val_metrics = self.__val_one_epoch()
-                self.__append_to_csv(epoch, val_metrics, mode='val')
+                self.__append_to_csv(epoch + 1, val_metrics, mode='val')
                 if self.verbose:
                     print(f"Classification Finetune Validating Epoch {epoch + 1} | {val_metrics}")
                 if val_metrics.accuracy > best_val_accuracy:
@@ -173,8 +176,8 @@ class ClassificationFinetune:
         self.recall.reset()
         self.micro_f1_score.reset()
         self.macro_f1_score.reset()
-
-        for (data, labels) in self.train_loader:
+        train_loader = tqdm(self.train_loader, desc="Training") if self.verbose else self.train_loader
+        for (data, labels) in train_loader:
             self.optimizer.zero_grad()
 
             outputs = self.model(data, finetune_mode=self.finetune_mode)
@@ -210,8 +213,8 @@ class ClassificationFinetune:
         self.recall.reset()
         self.micro_f1_score.reset()
         self.macro_f1_score.reset()
-
-        for (data, labels) in self.val_loader:
+        val_loader = tqdm(self.val_loader, desc="Validating") if self.verbose else self.val_loader
+        for (data, labels) in val_loader:
             outputs = self.model(data, finetune_mode=self.finetune_mode)
             _, predicted = torch.max(outputs, -1)
             self.accuracy.update(predicted, labels)
@@ -254,8 +257,8 @@ class ClassificationFinetune:
         self.recall.reset()
         self.micro_f1_score.reset()
         self.macro_f1_score.reset()
-
-        for (data, labels) in self.test_loader:
+        test_loader = tqdm(self.test_loader, desc="Testing") if self.verbose else self.test_loader
+        for (data, labels) in test_loader:
             outputs = model(data, finetune_mode=self.finetune_mode)
             _, predicted = torch.max(outputs, -1)
             self.accuracy.update(predicted, labels)
