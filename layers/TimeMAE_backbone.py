@@ -4,11 +4,11 @@ import torch.nn as nn
 
 class FeatureExtractor(nn.Module):
     def __init__(
-            self,
-            num_features: int,
-            d_model: int,
-            kernel_size: int,
-            stride: int,
+        self,
+        num_features: int,
+        d_model: int,
+        kernel_size: int,
+        stride: int,
     ):
         super(FeatureExtractor, self).__init__()
         self.input_projection = nn.Conv1d(
@@ -21,7 +21,7 @@ class FeatureExtractor(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            x: input tensor, shape (batch_size, seq_len，num_features)
+            x: input tensor, shape (batch_size, seq_len, num_features)
         Returns:
             output tensor, shape (batch_size, seq_len, d_model)
         """
@@ -32,14 +32,14 @@ class FeatureExtractor(nn.Module):
 
 class CodeBook(nn.Module):
     def __init__(
-            self,
-            d_model: int,
-            vocab_size: int,
+        self,
+        d_model: int,
+        vocab_size: int,
     ):
         super(CodeBook, self).__init__()
         self.d_model = d_model
         self.vocab_size = vocab_size
-        self.code_word = nn.Linear(d_model, vocab_size, bias=False)
+        self.code_word = nn.Linear(d_model, vocab_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -67,17 +67,16 @@ class CodeBook(nn.Module):
 
 class PositionalEncoding(nn.Module):
     def __init__(
-            self,
-            max_len: int,
-            d_model: int,
-            dropout: float,
+        self,
+        max_len: int,
+        d_model: int,
+        dropout: float,
     ):
         super(PositionalEncoding, self).__init__()
         self.d_model = d_model
         self.max_len = max_len
         self.embedding = nn.Embedding(max_len, d_model)
         self.dropout = nn.Dropout(dropout)
-        nn.init.xavier_uniform_(self.embedding.weight)  # initialize the positional encoding, using 'xavier_uniform_'
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -86,18 +85,17 @@ class PositionalEncoding(nn.Module):
         Returns:
             output tensor, shape (batch_size, seq_len, d_model)
         """
-        batch_size, seq_len, d_model = x.size()
-        pos = torch.arange(seq_len).repeat(batch_size, 1).to(x.device)
-        x = self.embedding(pos)
-        return self.dropout(x)
+        batch_size = x.size(0)
+        pos = self.embedding.weight.unsqueeze(0).repeat(batch_size, 1, 1)
+        return self.dropout(pos)
 
 
 class ResidualConnection(nn.Module):
     def __init__(
-            self,
-            d_model: int,
-            enable_res_param: bool,
-            dropout: float,
+        self,
+        d_model: int,
+        enable_res_param: bool,
+        dropout: float,
     ):
         super(ResidualConnection, self).__init__()
         self.norm = nn.LayerNorm(d_model)
@@ -116,34 +114,44 @@ class ResidualConnection(nn.Module):
         """
         if isinstance(x, list):
             # For TimeMAEDecoupledEncoderLayer
+            # x = [x_visible, x_mask_token]
             assert len(x) == 2
-            return x[1] + self.res_param * self.dropout(sublayer(self.norm(x[0])))
+            if self.enable_res_param:
+                return self.norm(x[1] + self.dropout(self.res_param * sublayer(x)))
+            else:
+                return self.norm(x[1] + self.dropout(sublayer(x)))
 
         if self.enable_res_param:
-            return x + self.res_param * self.dropout(sublayer(self.norm(x)))
+            return self.norm(x + self.dropout(self.res_param * sublayer(x)))
         else:
-            return x + self.dropout(sublayer(self.norm(x)))
+            return self.norm(x + self.dropout(sublayer(x)))
 
 
 class TransformerEncoderLayer(nn.Module):
     def __init__(
-            self,
-            d_model: int,
-            nhead: int,
-            dim_feedforward: int,
-            dropout: float,
-            enable_res_param: bool,
+        self,
+        d_model: int,
+        nhead: int,
+        dim_feedforward: int,
+        dropout: float,
+        enable_res_param: bool,
     ):
         super(TransformerEncoderLayer, self).__init__()
-        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
+        self.self_attn = nn.MultiheadAttention(
+            d_model, nhead, dropout=dropout, batch_first=True
+        )
         # Feedforward
         self.feedforward = nn.Sequential(
             nn.Linear(d_model, dim_feedforward),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(dim_feedforward, d_model),
         )
-        self.res_connection1 = ResidualConnection(d_model, enable_res_param=enable_res_param, dropout=dropout)
-        self.res_connection2 = ResidualConnection(d_model, enable_res_param=enable_res_param, dropout=dropout)
+        self.res_connection1 = ResidualConnection(
+            d_model, enable_res_param=enable_res_param, dropout=dropout
+        )
+        self.res_connection2 = ResidualConnection(
+            d_model, enable_res_param=enable_res_param, dropout=dropout
+        )
 
     def forward(self, x, mask=None):
         """
@@ -154,7 +162,9 @@ class TransformerEncoderLayer(nn.Module):
             output tensor, shape (batch_size, seq_len, d_model)
         """
         # Multi-head self-attention
-        x = self.res_connection1(x, lambda _x: self.self_attn(_x, _x, _x, attn_mask=mask)[0])
+        x = self.res_connection1(
+            x, lambda _x: self.self_attn(_x, _x, _x, attn_mask=mask)[0]
+        )  # Only need the attention output
         # Feedforward
         x = self.res_connection2(x, self.feedforward)
         return x
@@ -162,23 +172,29 @@ class TransformerEncoderLayer(nn.Module):
 
 class TransformerDecoupledEncoderLayer(nn.Module):
     def __init__(
-            self,
-            d_model: int,
-            nhead: int,
-            dim_feedforward: int,
-            dropout: float,
-            enable_res_param: bool,
+        self,
+        d_model: int,
+        nhead: int,
+        dim_feedforward: int,
+        dropout: float,
+        enable_res_param: bool,
     ):
         super(TransformerDecoupledEncoderLayer, self).__init__()
-        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
+        self.self_attn = nn.MultiheadAttention(
+            d_model, nhead, dropout=dropout, batch_first=True
+        )
         # Feedforward
         self.feedforward = nn.Sequential(
             nn.Linear(d_model, dim_feedforward),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(dim_feedforward, d_model),
         )
-        self.res_connection1 = ResidualConnection(d_model, enable_res_param=enable_res_param, dropout=dropout)
-        self.res_connection2 = ResidualConnection(d_model, enable_res_param=enable_res_param, dropout=dropout)
+        self.res_connection1 = ResidualConnection(
+            d_model, enable_res_param=enable_res_param, dropout=dropout
+        )
+        self.res_connection2 = ResidualConnection(
+            d_model, enable_res_param=enable_res_param, dropout=dropout
+        )
 
     def forward(self, x_visible, x_mask_token, mask=None):
         """
@@ -191,7 +207,9 @@ class TransformerDecoupledEncoderLayer(nn.Module):
         """
         x = [x_visible, x_mask_token]
         # Multi-head self-attention
-        x = self.res_connection1(x, lambda _x: self.self_attn(_x[1], _x[0], _x[0], attn_mask=mask)[0])
+        x = self.res_connection1(
+            x, lambda _x: self.self_attn(_x[1], _x[0], _x[0], attn_mask=mask)[0]
+        )
         # Feedforward
         x = self.res_connection2(x, self.feedforward)
         return x
@@ -199,25 +217,27 @@ class TransformerDecoupledEncoderLayer(nn.Module):
 
 class TransformerEncoder(nn.Module):
     def __init__(
-            self,
-            d_model: int,
-            nhead: int,
-            dim_feedforward: int,
-            dropout: float,
-            num_layers: int,
-            enable_res_param: bool,
+        self,
+        d_model: int,
+        nhead: int,
+        dim_feedforward: int,
+        dropout: float,
+        num_layers: int,
+        enable_res_param: bool,
     ):
         super(TransformerEncoder, self).__init__()
-        self.encoder = nn.ModuleList([
-            TransformerEncoderLayer(
-                d_model=d_model,
-                nhead=nhead,
-                dim_feedforward=dim_feedforward,
-                dropout=dropout,
-                enable_res_param=enable_res_param,
-            )
-            for _ in range(num_layers)
-        ])
+        self.encoder = nn.ModuleList(
+            [
+                TransformerEncoderLayer(
+                    d_model=d_model,
+                    nhead=nhead,
+                    dim_feedforward=dim_feedforward,
+                    dropout=dropout,
+                    enable_res_param=enable_res_param,
+                )
+                for _ in range(num_layers)
+            ]
+        )
 
     def forward(self, x: torch.Tensor, mask=None) -> torch.Tensor:
         """
@@ -234,27 +254,31 @@ class TransformerEncoder(nn.Module):
 
 class TransformerDecoupledEncoder(nn.Module):
     def __init__(
-            self,
-            d_model: int,
-            nhead: int,
-            dim_feedforward: int,
-            dropout: float,
-            num_layers: int,
-            enable_res_param: bool,
+        self,
+        d_model: int,
+        nhead: int,
+        dim_feedforward: int,
+        dropout: float,
+        num_layers: int,
+        enable_res_param: bool,
     ):
         super(TransformerDecoupledEncoder, self).__init__()
-        self.decoupled_encoder = nn.ModuleList([
-            TransformerDecoupledEncoderLayer(
-                d_model=d_model,
-                nhead=nhead,
-                dim_feedforward=dim_feedforward,
-                dropout=dropout,
-                enable_res_param=enable_res_param,
-            )
-            for _ in range(num_layers)
-        ])
+        self.decoupled_encoder = nn.ModuleList(
+            [
+                TransformerDecoupledEncoderLayer(
+                    d_model=d_model,
+                    nhead=nhead,
+                    dim_feedforward=dim_feedforward,
+                    dropout=dropout,
+                    enable_res_param=enable_res_param,
+                )
+                for _ in range(num_layers)
+            ]
+        )
 
-    def forward(self, x_visible: torch.Tensor, x_mask_token: torch.Tensor, mask=None) -> torch.Tensor:
+    def forward(
+        self, x_visible: torch.Tensor, x_mask_token: torch.Tensor, mask=None
+    ) -> torch.Tensor:
         """
         Args:
             x_visible: input tensor, shape (batch_size, visible_seq_len, d_model)

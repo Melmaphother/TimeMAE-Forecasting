@@ -30,12 +30,14 @@ class ForecastingHead(nn.Module):
             d_model: int,
             pred_len: int,
             num_features: int,
+            dropout: float
     ):
         super(ForecastingHead, self).__init__()
         self.pred_len = pred_len
         self.num_features = num_features
-        self.flatten = nn.Flatten()
-        self.forecast_head = nn.Linear(seq_len * d_model, pred_len * num_features)
+        self.flatten = nn.Flatten(start_dim=-2)
+        self.forecast_head = nn.Linear(seq_len * d_model, pred_len)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -44,7 +46,9 @@ class ForecastingHead(nn.Module):
         Returns:
             output tensor, shape (batch_size, pred_len, num_features)
         """
-        x = self.flatten(x)  # (batch_size, seq_len * d_model)
-        x = self.forecast_head(x)  # (batch_size, pred_len * num_features)
-        x = x.view(-1, self.pred_len, self.num_features)  # (batch_size, pred_len, num_features)
+        # x: (batch_size, num_features, seq_len, d_model)
+        x = self.flatten(x)  # (batch_size, num_features, seq_len * d_model)
+        x = self.forecast_head(x)  # (batch_size, num_features, pred_len)
+        x = self.dropout(x)  # (batch_size, num_features, pred_len)
+        x = x.permute(0, 2, 1)  # (batch_size, pred_len, num_features)
         return x
