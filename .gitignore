@@ -1,5 +1,9 @@
 data_provider/ETT-small/
 data_provider/HAR
+data_provider/electricity/
+data_provider/exchange/
+data_provider/traffic/
+data_provider/weather/
 .idea
 results/
 __pycache__/

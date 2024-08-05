@@ -1,5 +1,5 @@
 from argparse import Namespace
-from .dataset import ETTDataset, HARDataset
+from .dataset import ETTDataset, HARDataset, CustomDataset
 from torch.utils.data import DataLoader
 
 
@@ -13,42 +13,41 @@ def data_provider(args: Namespace):
             train_dataset,
             batch_size=args.train_batch_size,
             shuffle=True,
-            num_workers=args.num_workers,
         )
         val_loader = DataLoader(
             val_dataset,
             batch_size=args.test_batch_size,
             shuffle=False,
-            num_workers=args.num_workers,
         )
         test_loader = DataLoader(
             test_dataset,
             batch_size=args.test_batch_size,
             shuffle=False,
-            num_workers=args.num_workers,
         )
     elif args.task == 'forecasting':
-        train_dataset = ETTDataset(args, flag='train')
-        val_dataset = ETTDataset(args, flag='val')
-        test_dataset = ETTDataset(args, flag='test')
+        if args.dataset in ['ETTh1', 'ETTh2', 'ETTm1', 'ETTm2']:
+            train_dataset = ETTDataset(args, flag='train')
+            val_dataset = ETTDataset(args, flag='val')
+            test_dataset = ETTDataset(args, flag='test')
+        else:
+            train_dataset = CustomDataset(args, flag='train')
+            val_dataset = CustomDataset(args, flag='val')
+            test_dataset = CustomDataset(args, flag='test')
 
         train_loader = DataLoader(
             train_dataset,
             batch_size=args.train_batch_size,
             shuffle=True,
-            num_workers=args.num_workers,
         )
         val_loader = DataLoader(
             val_dataset,
             batch_size=args.test_batch_size,
             shuffle=False,
-            num_workers=args.num_workers,
         )
         test_loader = DataLoader(
             test_dataset,
             batch_size=args.test_batch_size,
             shuffle=False,
-            num_workers=args.num_workers,
         )
     else:
         raise ValueError(f'Invalid task: {args.task=}', 'task should be one of [classification, forecasting]')
